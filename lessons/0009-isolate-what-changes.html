@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson 9 — Isolate What Changes</title>
-<link rel="stylesheet" href="../assets/course.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<link rel="stylesheet" href="../assets/quiz.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<script src="../assets/theme.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<link rel="stylesheet" href="../assets/course.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<link rel="stylesheet" href="../assets/quiz.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<script src="../assets/theme.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 </head>
 <body>
 <div class="wrap">
@@ -111,9 +111,7 @@
     <p style="margin:0.4rem 0 0"><strong>Parnas, <em>On the Criteria To Be Used in Decomposing Systems into Modules</em> (CACM, 1972)</strong> — short and still the clearest statement of the idea: decompose by <em>anticipated change</em>, not by processing steps. Pair it with <strong>Ousterhout Ch. 9 (context) &amp; the information-hiding thread of Ch. 5.</strong> Then open <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/FreeRTOS.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/FreeRTOS.h</code></a> and scroll the long <code>#ifndef config… #define config…</code> block — you are reading the complete list of decisions FreeRTOS chose to make changeable.</p>
   </div>
 
-  <div class="ask">
-    <b>I'm your teacher — ask me.</b> Bring me a module and let's find its fault line: what is <em>most likely to change</em> here — a platform, a policy, a limit, a customer? Then we'll check whether that change is isolated to one seam or smeared across the code, and design the seam if it's missing. Naming the axis of change before writing the boundary is the skill.</p>
-  </div>
+  
 
   <div class="sources">
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
@@ -130,7 +128,7 @@
   </div>
 </div>
 
-<script src="../assets/quiz.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<script src="../assets/quiz.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 <script>
 Quiz.mount({
   mount: '[data-quiz]',

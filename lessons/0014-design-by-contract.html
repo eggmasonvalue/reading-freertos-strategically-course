@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson 14 — Design by Contract</title>
-<link rel="stylesheet" href="../assets/course.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<link rel="stylesheet" href="../assets/quiz.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<script src="../assets/theme.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<link rel="stylesheet" href="../assets/course.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<link rel="stylesheet" href="../assets/quiz.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<script src="../assets/theme.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 </head>
 <body>
 <div class="wrap">
@@ -83,9 +83,7 @@ configASSERT( pxQueue-&gt;uxItemSize == 0 );         <span class="cmt">/* line 1
     <p style="margin:0.4rem 0 0"><strong>Bertrand Meyer, <em>Design by Contract</em> (the Eiffel concept; any faithful summary of preconditions / postconditions / invariants).</strong> Then scan <code>queue.c</code> for <code>configASSERT</code> and sort ten of them into "precondition (caller bug)" vs "internal invariant (our bug)" — and find one you think should arguably be a checked return instead. (Add Meyer to <a href="../index.html#references">RESOURCES.md</a>.)</p>
   </div>
 
-  <div class="ask">
-    <b>I'm your teacher — ask me.</b> Show me a function of yours and we'll write its contract explicitly — precondition, postcondition, invariant — decide which parts a type can hold and which need a <code>configASSERT</code>-style tripwire, and argue about which build stages should keep the asserts live. Drawing those lines <em>is</em> the skill.
-  </div>
+  
 
   <div class="sources">
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
@@ -101,7 +99,7 @@ configASSERT( pxQueue-&gt;uxItemSize == 0 );         <span class="cmt">/* line 1
   </div>
 </div>
 
-<script src="../assets/quiz.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<script src="../assets/quiz.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 <script>
 Quiz.mount({
   mount: '[data-quiz]',

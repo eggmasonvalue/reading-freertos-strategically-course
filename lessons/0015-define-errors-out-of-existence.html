@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson 15 — Define Errors Out of Existence</title>
-<link rel="stylesheet" href="../assets/course.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<link rel="stylesheet" href="../assets/quiz.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<script src="../assets/theme.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<link rel="stylesheet" href="../assets/course.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<link rel="stylesheet" href="../assets/quiz.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<script src="../assets/theme.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 </head>
 <body>
 <div class="wrap">
@@ -74,9 +74,7 @@ BaseType_t xQueueReceive( QueueHandle_t xQueue, <span class="kw">void</span> * p
     <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 10 ("Define Errors Out of Existence").</strong> Then split ten <code>task.h</code> functions into <code>void</code> (can't-fail) vs <code>BaseType_t</code> (can-fail); for one <code>void</code> one, trace where the difficulty was <em>absorbed</em> (as we did for <code>vTaskDelete</code>), and for one can-fail one, ask whether a redesign could have deleted the error honestly.</p>
   </div>
 
-  <div class="ask">
-    <b>I'm your teacher — ask me.</b> Bring an API of yours heavy with error returns and we'll try to <em>delete</em> some — redefine semantics, mask at the resolving layer (while keeping a trace hook), or safe-state on the impossible — until only the errors that genuinely need a caller decision remain. Doing that subtraction <em>without losing observability</em> is the skill.
-  </div>
+  
 
   <div class="sources">
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
@@ -92,7 +90,7 @@ BaseType_t xQueueReceive( QueueHandle_t xQueue, <span class="kw">void</span> * p
   </div>
 </div>
 
-<script src="../assets/quiz.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<script src="../assets/quiz.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 <script>
 Quiz.mount({
   mount: '[data-quiz]',

@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson 12 — Opaque Handles & Incomplete Types</title>
-<link rel="stylesheet" href="../assets/course.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<link rel="stylesheet" href="../assets/quiz.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<script src="../assets/theme.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<link rel="stylesheet" href="../assets/course.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<link rel="stylesheet" href="../assets/quiz.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<script src="../assets/theme.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 </head>
 <body>
 <div class="wrap">
@@ -102,9 +102,7 @@
     <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 5 ("Information Hiding and Leakage").</strong> Read it holding the queue: the header is the interface, the incomplete type is the hiding <em>mechanism</em>, the transparent-struct alternative is the leakage. Then diff <code>queue.h</code> against the <code>struct</code> in <code>queue.c</code> and, for three hidden fields, name what would break in a caller if that field were exposed and later changed.</p>
   </div>
 
-  <div class="ask">
-    <b>I'm your teacher — ask me.</b> Bring me a header that exposes a struct body and we'll decide together whether it's a boundary that earns opacity or a helper where hiding is ceremony — then, if it earns it, convert it live (forward declaration, moved body, constructor, accessors) and weigh what the opacity cost. Pricing that tradeoff <em>is</em> the skill.
-  </div>
+  
 
   <div class="sources">
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
@@ -121,7 +119,7 @@
   </div>
 </div>
 
-<script src="../assets/quiz.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<script src="../assets/quiz.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 <script>
 Quiz.mount({
   mount: '[data-quiz]',

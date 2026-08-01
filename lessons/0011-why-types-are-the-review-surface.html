@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson 11 — Why Types Are the Review Surface</title>
-<link rel="stylesheet" href="../assets/course.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<link rel="stylesheet" href="../assets/quiz.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<script src="../assets/theme.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<link rel="stylesheet" href="../assets/course.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<link rel="stylesheet" href="../assets/quiz.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<script src="../assets/theme.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 </head>
 <body>
 <div class="wrap">
@@ -108,9 +108,7 @@ BaseType_t xTaskCreate( TaskFunction_t          pxTaskCode,
     <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 4 ("Modules Should Be Deep"), read with the substitution <em>interface = the type signature</em>, and Ch. 5 ("Information Hiding") for how the handle hides the TCB.</strong> Then do the drill: cover <code>tasks.c</code>, read only the <code>xTaskCreate</code> signature in <code>task.h</code>, and write out its full contract from the types alone. Check yourself against the body afterward.</p>
   </div>
 
-  <div class="ask">
-    <b>I'm your teacher — ask me.</b> Bring me a signature — yours, or one an LLM just generated — and we'll score it on the four blades (density · constrains the generator · machine-checked · durable), run the steelman against it, and rewrite it until the type carries the contract. Push back on the thesis, too: if you think a case in the steelman actually <em>breaks</em> it, argue that with me — that's the real work.
-  </div>
+  
 
   <div class="sources">
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
@@ -127,7 +125,7 @@ BaseType_t xTaskCreate( TaskFunction_t          pxTaskCode,
   </div>
 </div>
 
-<script src="../assets/quiz.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<script src="../assets/quiz.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 <script>
 Quiz.mount({
   mount: '[data-quiz]',

@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson 13 — Make Illegal States Unrepresentable</title>
-<link rel="stylesheet" href="../assets/course.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<link rel="stylesheet" href="../assets/quiz.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<script src="../assets/theme.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<link rel="stylesheet" href="../assets/course.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<link rel="stylesheet" href="../assets/quiz.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<script src="../assets/theme.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 </head>
 <body>
 <div class="wrap">
@@ -106,9 +106,7 @@ give( myDataQueue );   <span class="cmt">/* ERROR: incompatible type. The wall i
     <p style="margin:0.4rem 0 0"><strong>Alexis King, "Parse, Don't Validate" (2019)</strong> — the clearest statement of pushing validity into types so illegal states can't be built, and of the constructor as the one validation boundary. Then re-read <code>semphr.h:38</code> and the <code>uxItemSize</code> asserts in <code>queue.c</code>, and answer in one sentence: which guarantee did FreeRTOS move from compile time to run time, and under what build does it disappear? (See <a href="../index.html#references">RESOURCES.md</a>.)</p>
   </div>
 
-  <div class="ask">
-    <b>I'm your teacher — ask me.</b> Bring me two types in your code that are "the same underneath but must not be swapped," and we'll decide whether the mix is a real, silent-enough bug to justify a struct-wrapper wall — and where the <code>configASSERT</code> backstop belongs for the states C can't type. Pricing that tradeoff, with the steelman in mind, <em>is</em> the skill.
-  </div>
+  
 
   <div class="sources">
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
@@ -124,7 +122,7 @@ give( myDataQueue );   <span class="cmt">/* ERROR: incompatible type. The wall i
   </div>
 </div>
 
-<script src="../assets/quiz.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<script src="../assets/quiz.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 <script>
 Quiz.mount({
   mount: '[data-quiz]',

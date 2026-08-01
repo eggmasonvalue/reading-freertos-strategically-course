@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson 8 — Pull Complexity Downward</title>
-<link rel="stylesheet" href="../assets/course.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<link rel="stylesheet" href="../assets/quiz.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<script src="../assets/theme.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<link rel="stylesheet" href="../assets/course.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<link rel="stylesheet" href="../assets/quiz.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<script src="../assets/theme.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 </head>
 <body>
 <div class="wrap">
@@ -120,9 +120,7 @@ TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode, ...,
     <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 8 ("Pull Complexity Downward"),</strong> and note his own caution that pulling down isn't universal — it's right when the complexity is closely related to the module's function, when it simplifies many callers, and when it genuinely shrinks the interface. Then read the top-of-file comments of <code>heap_1.c</code> and <code>heap_4.c</code> in <a class="code-ref" href="../reference/FreeRTOS-Kernel/portable/MemMang"><code>./reference/FreeRTOS-Kernel/portable/MemMang/</code></a> back to back: same two-function contract, opposite amounts of complexity absorbed.</p>
   </div>
 
-  <div class="ask">
-    <b>I'm your teacher — ask me.</b> Bring me an interface — yours or a model's — and we'll trace which way complexity is flowing across it. For every parameter, flag, and ordering rule we'll ask the one question that decides it: <em>is this here because the caller truly must own it, or because it was easier to write this way?</em> Sorting real constraints from disguised laziness is the skill.
-  </div>
+  
 
   <div class="sources">
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
@@ -139,7 +137,7 @@ TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode, ...,
   </div>
 </div>
 
-<script src="../assets/quiz.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<script src="../assets/quiz.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 <script>
 Quiz.mount({
   mount: '[data-quiz]',

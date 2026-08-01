@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson 10 — Better Together or Apart?</title>
-<link rel="stylesheet" href="../assets/course.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<link rel="stylesheet" href="../assets/quiz.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<script src="../assets/theme.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<link rel="stylesheet" href="../assets/course.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<link rel="stylesheet" href="../assets/quiz.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<script src="../assets/theme.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 </head>
 <body>
 <div class="wrap">
@@ -96,9 +96,7 @@ vTaskMissedYield();  xTaskCheckForTimeOut( ... );  xTaskGetSchedulerState();</co
     <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 9 ("Better Together or Better Apart?").</strong> Note his four "bring together" signals (shared info, used together, conceptual overlap, hard-to-understand-apart) and the warning against splitting that creates coupling. Then verify the specimen: in <a class="code-ref" href="../reference/FreeRTOS-Kernel"><code>./reference/FreeRTOS-Kernel/</code></a>, confirm <code>TCB_t</code> is defined only in <code>tasks.c</code>, and grep <code>queue.c</code> for the <code>...Task...</code> calls — that short list <em>is</em> the seam.</p>
   </div>
 
-  <div class="ask">
-    <b>I'm your teacher — ask me.</b> Bring me a "this file is too big, let's split it" proposal (yours or a model's). We'll ignore the line count and do the only test that matters: draw the proposed cut and list everything that would have to cross it. If a secret crosses, we keep it whole; if only a thin interface does, we make that interface real. That triage is the skill — and it closes Module B.</p>
-  </div>
+  
 
   <div class="sources">
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
@@ -115,7 +113,7 @@ vTaskMissedYield();  xTaskCheckForTimeOut( ... );  xTaskGetSchedulerState();</co
   </div>
 </div>
 
-<script src="../assets/quiz.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<script src="../assets/quiz.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 <script>
 Quiz.mount({
   mount: '[data-quiz]',

@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson 7 — Different Layer, Different Abstraction</title>
-<link rel="stylesheet" href="../assets/course.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<link rel="stylesheet" href="../assets/quiz.css?v=69e4003b144e9d3c5683ab9c62988eb581b626c3">
-<script src="../assets/theme.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<link rel="stylesheet" href="../assets/course.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<link rel="stylesheet" href="../assets/quiz.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
+<script src="../assets/theme.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 </head>
 <body>
 <div class="wrap">
@@ -101,9 +101,7 @@ pxNewTCB-&gt;pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB-&gt;px
     <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 7 ("Different Layer, Different Abstraction"),</strong> especially the sections on pass-through methods and pass-through variables. Then trace the specimen yourself: pick any <code>port*</code> macro in <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/portable/GCC/ARM_CM3/portmacro.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/portable/GCC/ARM_CM3/portmacro.h</code></a> and find where the kernel calls it — note how the vocabulary drops a level each time you descend.</p>
   </div>
 
-  <div class="ask">
-    <b>I'm your teacher — ask me.</b> Show me a layered design — yours, a framework's, or a model's "clean architecture" — and we'll walk each boundary asking one question: <em>what abstraction does this layer add?</em> Any layer that can't answer gets collapsed. Doing that walk out loud is the skill.
-  </div>
+  
 
   <div class="sources">
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
@@ -119,7 +117,7 @@ pxNewTCB-&gt;pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB-&gt;px
   </div>
 </div>
 
-<script src="../assets/quiz.js?v=69e4003b144e9d3c5683ab9c62988eb581b626c3"></script>
+<script src="../assets/quiz.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 <script>
 Quiz.mount({
   mount: '[data-quiz]',
