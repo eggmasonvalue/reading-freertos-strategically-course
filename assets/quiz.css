@@ -1,0 +1,54 @@
+/* ============================================================================
+   quiz.css — styling for quiz.js. Linked alongside course.css in lessons.
+   ============================================================================ */
+
+.quiz {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 1.1rem 1.2rem 1.3rem;
+  margin: 1.8rem 0;
+  background: #fff;
+}
+.quiz-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.9rem; }
+.quiz-title {
+  font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--accent);
+}
+.quiz-score { font-family: var(--mono); font-size: 0.8rem; color: var(--ink-soft); }
+
+.quiz-q { margin: 1.1rem 0 0; padding-top: 1.1rem; border-top: 1px dotted var(--rule); }
+.quiz-q:first-of-type { border-top: 0; padding-top: 0; }
+.quiz-stem { font-size: 0.98rem; margin-bottom: 0.7rem; }
+
+.quiz-opts { display: flex; flex-direction: column; gap: 0.45rem; }
+.quiz-opt {
+  font-family: var(--serif);
+  font-size: 0.94rem;
+  text-align: left;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.quiz-opt:hover:not(:disabled) { border-color: var(--accent-2); background: #f3f6f7; }
+.quiz-opt:disabled { cursor: default; opacity: 0.95; }
+.quiz-opt.is-correct { border-color: var(--good); background: var(--good-bg); color: var(--good); font-weight: 600; }
+.quiz-opt.is-wrong   { border-color: var(--bad);  background: var(--bad-bg);  color: var(--bad); }
+
+.quiz-why { margin-top: 0.7rem; font-size: 0.9rem; padding: 0.6rem 0.8rem; border-radius: 5px; }
+.quiz-why.ok { background: var(--good-bg); }
+.quiz-why.no { background: var(--bad-bg); }
+.quiz-why .tag {
+  font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.08em;
+  text-transform: uppercase; font-weight: 700; margin-right: 0.3em;
+}
+.quiz-why.ok .tag { color: var(--good); }
+.quiz-why.no .tag { color: var(--bad); }
+
+.quiz-done {
+  margin-top: 1.1rem; padding: 0.7rem 0.9rem; border-radius: 5px;
+  background: var(--note-bg); font-size: 0.9rem; font-style: italic; color: var(--ink-soft);
+}

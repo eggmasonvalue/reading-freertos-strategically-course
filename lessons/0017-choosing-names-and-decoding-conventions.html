@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 17 — Choosing Names & Decoding Conventions</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 17 <span class="sep">/</span> Module D <span class="sep">/</span> ~14 min</p>
+  <h1>Names are a tax you pay once and collect forever</h1>
+  <p class="lede">A precise name is documentation that can't go stale — it's read at every use. Module D turns to readability, and it opens where reading begins: the name. The FreeRTOS prefix convention is a superb case study — but only if you split it into the half that's brilliant and the half that's a known anti-pattern.</p>
+
+  <p class="mission"><b>Why this lesson:</b> Naming is the readability lever with the highest duty cycle — every reader, every use, forever. LLMs generate names that are locally plausible but globally inconsistent; a strategic reviewer enforces the codebase's convention and demands names that carry precise meaning. But "carry the type in the name" is exactly the kind of received wisdom you should <em>not</em> swallow whole — half of it is genius and half of it is the thing every naming guide warns against. This lesson separates them.</p>
+
+  <h2>The principle (APoSD ch14)</h2>
+  <p>Ousterhout: a good name is an <em>image in the mind</em> of what the thing is — precise, consistent, non-misleading.<sup class="cite"><a href="#s1">1</a></sup> The diagnostic he draws from it: if a name is hard to choose, or keeps wanting to be vague, that's usually a symptom that the <em>underlying design</em> is muddled — the thing doesn't have one clear responsibility. So naming isn't just labeling; it's a probe into whether the abstraction is clean.</p>
+
+  <h2>Specimen: the Hungarian prefix scheme, decoded</h2>
+  <p>FreeRTOS encodes a variable's type in its name. With the key, dense declarations become legible at a glance:</p>
+  <pre><code>UBaseType_t  <span class="kw">uxPriority</span>;      <span class="cmt">// ux = UBaseType_t (unsigned)</span>
+void *       <span class="kw">pvParameters</span>;    <span class="cmt">// pv = pointer to void</span>
+const char * <span class="kw">pcName</span>;          <span class="cmt">// pc = pointer to char</span>
+BaseType_t   <span class="kw">xOverflowCount</span>;  <span class="cmt">// x  = BaseType_t / struct / "other"</span>
+void         <span class="kw">vTaskDelay</span>(...);  <span class="cmt">// v  = returns void  (you met this in C15)</span>
+                              <span class="cmt">// pd = a #define constant (pdTRUE, pdPASS)</span></code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/task.h — declarations throughout (e.g. lines 143, 156–157)</p>
+
+  <h2>The distinction that unlocks the whole debate: Apps vs Systems Hungarian</h2>
+  <p>This convention is one of the most-argued topics in programming, and most of the heat comes from people not making a distinction that Joel Spolsky drew sharply<sup class="cite"><a href="#s2">2</a></sup>. There are <em>two</em> Hungarian notations, and they are almost opposites:</p>
+  <div class="compare">
+    <div class="col-bad">
+      <h4><span class="chip shallow">Systems</span> encode the compiler's type</h4>
+      <p>Prefix says what the <em>machine</em> type is: <code>ux</code>=unsigned, <code>pc</code>=char*. This is what FreeRTOS uses. Critics' objection: it's <em>redundant</em> with the declaration the compiler already knows, adds noise, and <em>rots</em> when a type changes but the name doesn't.</p>
+    </div>
+    <div class="col-good">
+      <h4><span class="chip deep">Apps</span> encode the <em>kind</em>/meaning</h4>
+      <p>Prefix says what the value <em>means</em> in the domain: <code>us</code>=unsafe string, <code>row</code>/<code>col</code>, <code>dx</code>=a delta. The compiler can't check this, so the name is the <em>only</em> signal — and mixing <code>unsafeString</code> into a <code>safeString</code> slot now "looks wrong."</p>
+    </div>
+  </div>
+  <div class="callout key">
+    <span class="label">The insight that connects it to Module C</span>
+    <strong>Apps Hungarian is C13's "make illegal states unrepresentable," done in names instead of types.</strong> When your language can't give a "sanitized string" its own type, encoding <em>kind</em> in the name makes the illegal mix <em>look</em> wrong to a human reviewer — a poor-man's newtype wall. That kind of Hungarian is genuinely valuable and survives every critique. Systems Hungarian — which is what the kernel actually uses — is the kind naming guides rightly attack: it duplicates information the type already carries. So the honest verdict on FreeRTOS is split: it uses the <em>weaker</em> of the two Hungarians, and it does so for reasons that were defensible in its context, not because Systems Hungarian is good in general.</p>
+  </div>
+
+  <h2>So why did a great codebase pick the weaker kind? The tradeoff, priced</h2>
+  <div class="compare">
+    <div class="col-good">
+      <h4><span class="chip deep">bought</span> what it gains here</h4>
+      <p>Type/signedness/return travels <em>with</em> every use, even far from the declaration — valuable in 2004-era embedded C with no IDE hover, reviewed on paper or in <code>diff</code>. And because widths are <em>portable typedefs</em> (<code>BaseType_t</code> varies by target), the prefix flags signedness bugs the raw type name alone would obscure across ports.</p>
+    </div>
+    <div class="col-bad">
+      <h4><span class="chip shallow">paid</span> what it costs</h4>
+      <p>Newcomers must learn the cipher first (obscurity for the uninitiated). Names are noisier. And the prefix can <em>lie</em> when maintainers slip — which is worse than no prefix, because readers trust it.</p>
+    </div>
+  </div>
+  <div class="callout watch">
+    <span class="label">The wart — proof that Systems Hungarian rots</span>
+    In <code>task.h</code>, in the task-status struct:
+    <pre style="margin:0.6rem 0 0"><code>UBaseType_t <span class="kw">xTaskNumber</span>;   <span class="cmt">/* line 171 (verified) */</span></code></pre>
+    By the scheme an unsigned <code>UBaseType_t</code> should be <code>ux</code>-prefixed — this one is <code>x</code>. The name now claims "other/signed-ish" while the type is unsigned: a small lie, harmless here, but it's the <em>exact failure mode critics predict</em> for Systems Hungarian — the prefix and the type drift apart because nothing enforces their agreement (unlike an actual type, which the compiler checks — C11 blade 3). <strong>A naming convention is only as obvious as the discipline maintaining it.</strong>
+  </div>
+
+  <div class="callout counter">
+    <span class="label">The strongest case against this convention</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>It's redundant and rots.</strong> The compiler already knows the type; encoding it in the name duplicates a fact that can — and did (<code>xTaskNumber</code>) — fall out of sync. Redundant, unchecked information is a liability.</li>
+      <li><strong>Modern tooling makes it pure noise.</strong> With a language server that shows the type on hover, the prefix adds visual clutter for zero information. In 2024 TypeScript it would be indefensible.</li>
+      <li><strong>It couples names to types.</strong> Change a variable's type and you must rename it everywhere or the name lies — friction that discourages exactly the refactors you'd want.</li>
+    </ol>
+  </div>
+  <p><strong>Synthesis.</strong> The critique is correct <em>about Systems Hungarian in a modern context</em> — and that's the lesson, not a defense. The strategic reading has three moves. <strong>Decode:</strong> read the convention fluently so the code is legible (done). <strong>Judge in context:</strong> Systems Hungarian earned its cost in a portable, safety-critical C kernel with primitive-era tooling and cross-target typedefs; the same scheme in a modern typed language with a language server is pure noise — the tool already tells you the type, so the prefix is clutter that can only rot. Context, not fashion, decides. <strong>Enforce or migrate, but don't mix:</strong> whatever a codebase chose, hold every new name (yours or the model's) to it, because an <em>inconsistent</em> convention is worse than either pure choice — it trains readers to trust a signal that sometimes lies. And separately: wherever your language can't type a distinction that matters (sanitized vs raw, safe vs unsafe), reach for <em>Apps</em> Hungarian deliberately — that half is timeless, and it's C13 wearing a different hat.</p>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    A diff that introduces names in a <em>different</em> style from the surrounding file — the classic LLM tell, because the model averages over many codebases instead of matching this one. Say it: <em>"This name is fine in the abstract but breaks the convention this file uses — match the local style, or we've made the codebase less obvious, not more."</em> And the higher-order one: <em>"This prefix encodes the type the compiler already checks; if we want a name to carry a distinction, make it carry the </em>kind<em>, not the machine type."</em>
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <p>From memory.</p>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 14 ("Choosing Names")</strong>, and Joel Spolsky, "Making Wrong Code Look Wrong" for the Apps-vs-Systems Hungarian distinction. Then grep <code>task.h</code> for one more prefix that doesn't match its type, and decide: is any prefix in the kernel doing <em>Apps</em>-Hungarian work (carrying meaning the type can't), or is it all Systems? (See <a href="../index.html#references">RESOURCES.md</a>.)</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Paste a cluster of names from your codebase (or an LLM's) and we'll score them for precision, consistency, and honesty — and separate the prefixes that carry <em>kind</em> (keep) from those that merely restate the <em>type</em> (probably drop). That separation <em>is</em> the skill.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 14 (names precise, consistent, non-misleading; hard-to-name signals a muddled design).</li>
+      <li id="s2">Joel Spolsky, "Making Wrong Code Look Wrong" (2005) — the Apps vs Systems Hungarian distinction; Apps Hungarian makes illegal mixes look wrong.</li>
+      <li id="s3">Specimen (verified): <code>task.h</code> prefixes (lines 143, 156–157) and the <code>xTaskNumber</code> Systems-Hungarian wart (line 171). Convention: FreeRTOS Coding Standard &amp; Style Guide.</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0016-api-design-as-a-craft.html">← Lesson 16</a>
+    <a href="0018-comments-as-a-design-tool.html">Lesson 18 — Comments as a Design Tool →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'What is the key difference between Apps and Systems Hungarian?',
+      options: [
+        'Apps encodes meaning/kind; Systems encodes the machine type',
+        'Apps is for applications; Systems is for operating systems',
+        'Apps uses long prefixes; Systems uses single letters'
+      ],
+      answer: 0,
+      why: 'Apps Hungarian encodes domain kind the compiler can\u2019t check (unsafe vs safe string); Systems Hungarian encodes the machine type the compiler already knows. FreeRTOS uses the latter \u2014 the kind naming guides criticize.'
+    },
+    {
+      q: 'Why is Apps Hungarian defensible while Systems Hungarian is criticized?',
+      options: [
+        'Apps prefixes are shorter and easier to type quickly',
+        'Apps carries a distinction the type system can\u2019t; Systems is redundant',
+        'Apps is checked by the compiler; Systems is not checked'
+      ],
+      answer: 1,
+      why: 'Apps Hungarian makes an untypeable distinction visible \u2014 C13\u2019s unrepresentable-states idea in names. Systems Hungarian duplicates a fact the compiler already holds, so it adds noise and can rot. Neither is compiler-checked.'
+    },
+    {
+      q: 'What does <code>UBaseType_t xTaskNumber</code> (x, not ux) best illustrate?',
+      options: [
+        'That unsigned types should never carry a prefix',
+        'That Systems Hungarian rots when unenforced',
+        'That the compiler silently rewrites the prefix'
+      ],
+      answer: 1,
+      why: 'The prefix lies about signedness because nothing enforces name/type agreement \u2014 the exact failure critics predict for Systems Hungarian. Unlike a real type, which the compiler checks, the prefix can drift.'
+    },
+    {
+      q: 'How should you judge whether a naming convention earns its keep?',
+      options: [
+        'By whether famous codebases have adopted it before',
+        'By context \u2014 tooling era and what the type can\u2019t say',
+        'By preferring the shortest names in all situations'
+      ],
+      answer: 1,
+      why: 'Systems Hungarian earned its cost in primitive-era portable C; with a modern language server it\u2019s clutter. Context (tooling, domain, what the type can express) decides \u2014 not fashion or a blanket shortness rule.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

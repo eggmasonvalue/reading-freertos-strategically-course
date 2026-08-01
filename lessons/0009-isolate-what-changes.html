@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 9 — Isolate What Changes</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 09 <span class="sep">/</span> ~13 min <span class="sep">/</span> Module B</p>
+  <h1>Draw the line where the change will fall</h1>
+  <p class="lede">Every codebase has a fault line: the set of things that <em>will</em> change — this chip, that tick rate, whether mutexes are even compiled in. A design either gathers those changes behind one seam, or scatters them through the source as landmines. Parnas's 1972 insight is that you can <em>predict</em> the fault line and build the seam <em>first</em>.</p>
+
+  <p class="mission"><b>Why this lesson:</b> The most expensive review miss isn't a bug — it's a decision that's <em>smeared</em> across fifty files, so that changing it later means fifty edits and one forgotten. LLMs produce this constantly: a magic number inlined everywhere, a platform assumption baked into each function, a feature you can't remove because it has no boundary. This lesson trains you to ask of any likely-to-change fact: <em>does this live in exactly one place?</em> — and to design that one place on purpose.</p>
+
+  <h2>The idea: encapsulate the decisions likely to change</h2>
+  <p>Parnas, <em>On the Criteria To Be Used in Decomposing Systems into Modules</em> (1972): don't split a system by the <em>steps</em> it performs — split it by the <strong>design decisions that are likely to change</strong>, and hide each one inside a module so that a change touches that module only.<sup class="cite"><a href="#s1">1</a></sup> Ousterhout gives the same idea a sharper edge in the design vocabulary you already own: a change that's isolated is a <em>deep</em> boundary paying off; a change smeared across modules is <a href="0004-information-hiding-and-leakage.html">information leakage</a> — the same secret known in many places. The strategic act is to <strong>name the thing that varies and give it a seam</strong> before the variation arrives.</p>
+  <div class="compare">
+    <div class="col-good">
+      <h4><span class="chip deep">seam</span> good</h4>
+      <p>Everything that varies — tick width, heap choice, which features exist — is pulled to one boundary. To retarget the system you edit <em>one</em> place. The rest of the kernel never learned the secret.</p>
+    </div>
+    <div class="col-bad">
+      <h4><span class="chip shallow">smear</span> costly</h4>
+      <p>The same changeable fact — a constant, a platform assumption — is copied into every file that needs it. Changing it is a search-and-replace across the tree, and the one you miss is the bug.</p>
+    </div>
+  </div>
+
+  <h2>Specimen: <code>FreeRTOSConfig.h</code> as the system's fault line</h2>
+  <p>FreeRTOS runs on dozens of chips, in 16- or 32- or 64-bit tick widths, with or without mutexes, timers, or dynamic allocation — an enormous space of variation. Almost none of that variation lives in the kernel source. It's gathered into <strong>one file the application owns</strong>, pulled in before anything else compiles:</p>
+  <pre><code><span class="cmt">/* FreeRTOS.h — the very first thing the kernel does is ask you for the secrets */</span>
+<span class="cmt">/* Application specific configuration options. */</span>
+<span class="kw">#include</span> "FreeRTOSConfig.h"</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/FreeRTOS.h — line 58</p>
+  <p>Roughly <strong>100 distinct <code>config*</code> / <code>INCLUDE_*</code> macros</strong> are read across the kernel, and every one of them resolves at this single seam. The kernel body never says "assume 32-bit ticks" or "assume mutexes exist" — it asks the seam. Three moves make the seam load-bearing rather than decorative:</p>
+
+  <h3>1. Sensible defaults, provided centrally</h3>
+  <p>Right after including your config, <code>FreeRTOS.h</code> fills every gap you left, so the kernel body can assume every macro is defined:</p>
+  <pre><code><span class="cmt">/* FreeRTOS.h — "if the app didn't decide, here's the safe default" */</span>
+<span class="kw">#ifndef</span> configUSE_MUTEXES
+    <span class="kw">#define</span> configUSE_MUTEXES        0
+<span class="kw">#endif</span>
+<span class="kw">#ifndef</span> configUSE_TIMERS
+    <span class="kw">#define</span> configUSE_TIMERS         0
+<span class="kw">#endif</span>
+<span class="kw">#ifndef</span> INCLUDE_vTaskDelete
+    <span class="kw">#define</span> INCLUDE_vTaskDelete      0
+<span class="kw">#endif</span></code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/FreeRTOS.h — lines 330, 334, 226</p>
+
+  <h3>2. The seam validates itself</h3>
+  <p>Some decisions <em>must</em> be made, or make no sense in combination. The seam refuses to compile rather than silently guess — pushing errors to build time, where they're cheapest:</p>
+  <pre><code><span class="cmt">/* FreeRTOS.h — a missing or contradictory decision fails loudly, early */</span>
+<span class="kw">#if</span> !defined( configUSE_16_BIT_TICKS ) &amp;&amp; !defined( configTICK_TYPE_WIDTH_IN_BITS )
+    <span class="kw">#error</span> Missing definition: One of configUSE_16_BIT_TICKS and
+           configTICK_TYPE_WIDTH_IN_BITS must be defined in FreeRTOSConfig.h.
+<span class="kw">#endif</span></code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/FreeRTOS.h — lines 60–62</p>
+
+  <h3>3. Whole features vanish through the seam</h3>
+  <p>Because the macro is known in one place, a feature can be <em>compiled out entirely</em> — not just disabled at runtime. Set <code>INCLUDE_vTaskDelete</code> to 0 and the function isn't merely unreachable, it doesn't exist:</p>
+  <pre><code><span class="cmt">/* tasks.c — the whole implementation is fenced by the seam's macro */</span>
+<span class="kw">#if</span> ( INCLUDE_vTaskDelete == 1 )
+    <span class="kw">void</span> vTaskDelete( TaskHandle_t xTaskToDelete ) { <span class="cmt">/* ...200 lines... */</span> }
+<span class="kw">#endif</span></code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/tasks.c — line 485 (guard repeats at every use site, e.g. 626)</p>
+
+  <div class="callout key">
+    <span class="label">Verdict</span>
+    The likely-to-change facts of an RTOS — word size, feature set, allocation policy, assert strategy — are named as <code>config*</code> macros and gathered at a single, self-validating, self-defaulting seam. To retarget FreeRTOS you edit <strong>one file you own</strong>; the ~10k lines of kernel never change. That's Parnas exactly: the module boundary is drawn around <em>what varies</em>, not around <em>what the code does step by step</em>. The seam is the product's portability.
+  </div>
+
+  <details class="deep"><summary>Deep dive — the seam has its own cost: <code>#ifdef</code> combinatorics, and why the <code>#error</code>s exist</summary>
+  <div class="body">
+    <p>Isolating change through <code>config*</code> macros is not free, and a strategic reader should see the bill. ~100 boolean-ish knobs define, in principle, an astronomical number of build configurations — and <code>#if</code>-fenced code is <em>only</em> compiled in the configs that enable it, so a combination no one built is a combination no one type-checked. This is the real reason the kernel body is dense with <code>#if ( INCLUDE_x == 1 )</code> fences and the header front-loads dozens of <code>#error</code> guards: the guards <em>prune the invalid region of the configuration space at build time</em>, converting "silently broken combination" into "won't compile, here's why." That's the second-order insight — the self-validation you saw in move 2 isn't politeness, it's the <em>containment</em> that makes a 100-knob seam tractable instead of a combinatorial minefield. The general lesson: when you create a variation seam, you also inherit responsibility for the <em>cross-products</em> of its options, and the cheapest way to discharge that is to make illegal combinations fail loudly and early (a preview of lesson <a href="0014-design-by-contract.html">C14</a>'s build-time and run-time asserts, and of <a href="0013-make-illegal-states-unrepresentable.html">C13</a>'s "make illegal states unrepresentable").</p>
+  </div></details>
+
+  <h2>The strongest case against building seams (steelman)</h2>
+  <p>Emergent-design advocates would push back hard on "design the seam first." State their case at full strength, then synthesise.</p>
+  <div class="callout counter">
+    <span class="label">The case against</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>You can't predict change.</strong> Every seam encodes a guess about what will vary. Guess wrong — as teams usually do — and you've paid for flexibility along an axis nothing moves on, while the change that <em>does</em> come cuts across your seams. Simpler to write plainly and refactor when reality arrives (YAGNI / emergent design).</li>
+      <li><strong>Seams are complexity.</strong> ~100 macros is <code>#ifdef</code> soup: code that reads differently per build, paths you can't see without knowing the config, a combinatorial test burden. The abstraction meant to tame change becomes its own source of cognitive load.</li>
+      <li><strong>Refactoring is cheap now.</strong> With modern tooling, extracting a seam <em>when</em> the second case appears is a small, safe change — so pre-building it buys little and risks freezing the wrong boundary.</li>
+    </ol>
+  </div>
+  <p><strong>The synthesis.</strong> The steelman is <em>correct as a default</em> — and the lesson already conceded it: speculative seams are the over-engineer's trap, and "the discipline is prediction, not paranoia." The resolution is that Parnas's rule and YAGNI agree far more than they look. Both say: don't build a seam for a change you're <em>guessing</em> at. They differ only on changes you can <em>demonstrate</em>. FreeRTOS didn't speculate that it might someday run on another chip — portability across architectures is its entire reason to exist, an <em>observed, recurring</em> variation, so its seams sit on fault lines that provably move. That's the test that separates a good seam from #ifdef soup: <em>is there real, occurring variation along this axis, or am I imagining one?</em> Point (3) is the tie-breaker for genuine uncertainty — when you're <em>not</em> sure the change will come, YAGNI wins, because refactoring-in a seam later is cheap and un-building a wrong one is not. So: seam the changes you can point to; write plainly and wait on the ones you can only imagine.</p>
+
+  <h2>The honest borderline: don't build seams for changes that won't come</h2>
+  <p>The failure mode isn't only <em>too few</em> seams — it's <em>too many</em>. A config knob, a strategy interface, or a plugin point built for a variation that never arrives is pure cost: it enlarges the interface (<a href="0002-deep-vs-shallow-modules.html">shallower module</a>), and every reader now has to reason about a flexibility no one uses. FreeRTOS earns its ~100 macros because each corresponds to a variation that <em>demonstrably</em> occurs across real ports and real products. The discipline is prediction, not paranoia.</p>
+  <div class="callout key">
+    <span class="label">Munger inversion — where the rule dies</span>
+    Invert "isolate what changes" and you get its two failure modes at once: <strong>(1)</strong> you failed to predict a real change, so it's smeared everywhere (the common one) — and <strong>(2)</strong> you predicted a change that never came, so you paid for a seam that only adds interface (the over-engineer's trap). A good seam sits exactly on a fault line that <em>will</em> move. Speculative generality is just leakage with better manners.
+  </div>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    A changeable fact — a platform constant, a tuning number, a feature toggle — appearing in more than one file. The words: <em>"This decision is duplicated across N sites; the day it changes, one of them will be missed. Give it a single owner — a named constant or a config seam — and have everything ask that."</em> And its mirror, aimed at over-eager models: <em>"What real, occurring variation is this configuration point for? If none, delete it — the flexibility is costing us and buying nothing."</em>
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Parnas, <em>On the Criteria To Be Used in Decomposing Systems into Modules</em> (CACM, 1972)</strong> — short and still the clearest statement of the idea: decompose by <em>anticipated change</em>, not by processing steps. Pair it with <strong>Ousterhout Ch. 9 (context) &amp; the information-hiding thread of Ch. 5.</strong> Then open <code>./reference/FreeRTOS-Kernel/include/FreeRTOS.h</code> and scroll the long <code>#ifndef config… #define config…</code> block — you are reading the complete list of decisions FreeRTOS chose to make changeable.</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Bring me a module and let's find its fault line: what is <em>most likely to change</em> here — a platform, a policy, a limit, a customer? Then we'll check whether that change is isolated to one seam or smeared across the code, and design the seam if it's missing. Naming the axis of change before writing the boundary is the skill.</p>
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Parnas, D.L., <em>On the Criteria To Be Used in Decomposing Systems into Modules</em>, CACM 15(12), 1972 (decompose by likely change; information hiding). With Ousterhout, <em>A Philosophy of Software Design</em>, ch. 5 &amp; 9.</li>
+      <li id="s2">The seam: <code>./reference/FreeRTOS-Kernel/include/FreeRTOS.h</code> line 58 (config pulled in first); lines 60–62 (<code>#error</code> self-validation); lines 226/330/334 (central defaults). ~100 <code>config*</code>/<code>INCLUDE_*</code> macros referenced across the kernel.</li>
+      <li id="s3">Compile-out through the seam: <code>./reference/FreeRTOS-Kernel/tasks.c</code> line 485 (<code>#if ( INCLUDE_vTaskDelete == 1 )</code>).</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0008-pull-complexity-downward.html">← Lesson 8</a>
+    <a href="0010-better-together-or-apart.html">Lesson 10 — Better Together or Apart? →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'Parnas says to decompose a system primarily by what?',
+      options: [
+        'The sequence of processing steps the program executes',
+        'The design decisions that are most likely to change later',
+        'The number of source files the team wants to end up with'
+      ],
+      answer: 1,
+      why: 'Modules should be drawn around anticipated change, each hiding one likely-to-change decision, so a change lands in one module. Splitting by processing steps scatters each decision across every step.'
+    },
+    {
+      q: 'Why does <code>FreeRTOS.h</code> <code>#include "FreeRTOSConfig.h"</code> before anything else?',
+      options: [
+        'So the application owns the variation and the kernel body never assumes it',
+        'So the compiler can inline the configuration macros for faster execution',
+        'So each kernel file can redefine the macros to whatever locally suits it'
+      ],
+      answer: 0,
+      why: 'The config file is the single seam holding every changeable fact; reading it first lets the kernel default and validate the macros centrally, so no kernel source has to bake in a platform assumption.'
+    },
+    {
+      q: 'A model adds a config flag for a variation that never actually occurs. The problem?',
+      options: [
+        'Nothing — extra configuration always improves future maintainability',
+        'It runs slower because every macro must be evaluated at compile time',
+        'It enlarges the interface and adds cost while buying no real flexibility'
+      ],
+      answer: 2,
+      why: 'A seam only pays off on a fault line that truly moves. A knob for a change that never comes just widens the interface (a shallower module) and taxes every reader — speculative generality, not good design.'
+    },
+    {
+      q: 'YAGNI says "don\u2019t design the seam, refactor when change comes." Where does Parnas still win?',
+      options: [
+        'Everywhere — seams are guesses, so plain code always beats them',
+        'For variation you can demonstrate now, like FreeRTOS across chips',
+        'Nowhere — predicted change is never worth a seam built in advance'
+      ],
+      answer: 1,
+      why: 'The two rules agree on guessed change (don\u2019t seam it) and split only on demonstrable change. Portability across architectures is observed and recurring, so those seams sit on fault lines that provably move — not speculation.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

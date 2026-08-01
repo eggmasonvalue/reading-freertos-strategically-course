@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Review Checklist — Strategic Programmer</title>
+<link rel="stylesheet" href="../assets/course.css">
+<style>
+  .item { border-top: 1px solid var(--rule); padding: 0.9rem 0 0.5rem; }
+  .item:first-of-type { border-top: 0; }
+  .item h3 { margin: 0 0 0.25rem; font-size: 1.02rem; }
+  .item h3 .tag { font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); margin-left: 0.5em; border:1px solid var(--rule); padding:0.05em 0.4em; border-radius:3px; }
+  .item .ask { font-style: italic; color: var(--ink); margin: 0.2rem 0 0.3rem; }
+  .item .say { display:block; font-size:0.9rem; color: var(--ink-soft); }
+  .item .say b { color: var(--accent); font-style: normal; }
+  .group { font-family: var(--mono); font-size:0.72rem; letter-spacing:0.12em; text-transform:uppercase; color: var(--accent); margin: 2rem 0 0.4rem; }
+  @media print { .noprint { display:none; } body { font-size: 11pt; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Reference <span class="sep">/</span> API Review Checklist</p>
+  <h1>API Review Checklist</h1>
+  <p class="lede">The compressed output of Module C. Run this top-to-bottom on any interface — a teammate's PR, your own draft, or an LLM diff. Each item is a <em>question to ask</em> and a <em>sentence to say</em> when the answer is wrong. The goal is one interface the compiler, the caller, and the model all fall into using correctly.</p>
+
+  <p class="group">First pass — the type carries the contract (C11–C13)</p>
+  <div class="item">
+    <h3>1. Does the signature carry its own contract? <span class="tag">C11 · review density</span></h3>
+    <p class="ask">Can I call this correctly from the signature alone, without reading the body?</p>
+    <span class="say"><b>Say:</b> "This signature isn't carrying its contract — I have to read the implementation to call it safely. Push the meaning into the types."</span>
+  </div>
+  <div class="item">
+    <h3>2. Are internals hidden behind an opaque handle? <span class="tag">C12 · info hiding</span></h3>
+    <p class="ask">Is a struct body sitting in a public header where callers can touch fields they shouldn't?</p>
+    <span class="say"><b>Say:</b> "This type is transparent — its layout is now everyone's dependency. Forward-declare it, move the body to the <code>.c</code>, expose only the accessors we need." <em>(Cost: caller can't size it → provide a constructor / static-buffer variant.)</em></span>
+  </div>
+  <div class="item">
+    <h3>3. Are illegal states unrepresentable? <span class="tag">C13 · type-driven</span></h3>
+    <p class="ask">Do two things that must not be swapped share one <code>typedef</code> alias (both just <code>uint32_t</code> / <code>char*</code> / same handle)?</p>
+    <span class="say"><b>Say:</b> "These are the same type to the compiler, so it'll let us swap them — an illegal state left representable. If the mix is a real bug, wrap each in its own struct." <em>(Remember: <code>typedef</code> aliases; a struct makes a distinct type.)</em></span>
+  </div>
+
+  <p class="group">Second pass — guarantees the type can't make (C14–C15)</p>
+  <div class="item">
+    <h3>4. Are preconditions stated and checked? <span class="tag">C14 · design by contract</span></h3>
+    <p class="ask">Is there an unstated usage rule (non-NULL, lock held, index in range) that's neither typed nor asserted?</p>
+    <span class="say"><b>Say:</b> "This has an unstated precondition. Either make it unrepresentable, or assert it — don't leave it to hope." <em>(A precondition is a caller bug, not a handled case.)</em></span>
+  </div>
+  <div class="item">
+    <h3>5. Do the errors that exist need to exist? <span class="tag">C15 · define errors out</span></h3>
+    <p class="ask">For each error return: can a caller do anything meaningful with it? Could the semantics be redefined so it can't occur?</p>
+    <span class="say"><b>Say:</b> "What can a caller actually do with this failure? If nothing meaningful, design it out — no-op success, mask it lower, or crash on the impossible. Don't return a status nobody can act on." <em>(A <code>void</code> return can be a promise.)</em></span>
+  </div>
+
+  <p class="group">Third pass — craft (C16 · Bloch)</p>
+  <div class="item">
+    <h3>6. Easy to use right, hard to use wrong?</h3>
+    <p class="ask">Is the correct call the obvious one? Can a plausible misuse even be written?</p>
+    <span class="say"><b>Say:</b> "Make the wrong call hard to write — bake the constraint into the name or signature, like <code>...FromISR</code> does with calling context."</span>
+  </div>
+  <div class="item">
+    <h3>7. Any boolean traps?</h3>
+    <p class="ask">A bare <code>bool</code>/magic flag that's opaque at the call site (<code>foo(x, true, false)</code>)?</p>
+    <span class="say"><b>Say:</b> "These booleans are unreadable at the call site and swap-prone. Make them a named enum, or split into two well-named functions."</span>
+  </div>
+  <div class="item">
+    <h3>8. Consistent argument order & names?</h3>
+    <p class="ask">Does the same concept sit in the same slot across the whole API? (Kernel: handle first, data next, control/timeout last.)</p>
+    <span class="say"><b>Say:</b> "This argument order breaks the convention the rest of the API follows — least astonishment; line it up."</span>
+  </div>
+  <div class="item">
+    <h3>9. Small surface — when in doubt, leave it out?</h3>
+    <p class="ask">Is anything in the public interface that callers don't need? (You can add later; you can't remove.)</p>
+    <span class="say"><b>Say:</b> "Drop this from the public surface until a caller truly needs it — a smaller interface is a deeper module."</span>
+  </div>
+
+  <div class="callout key" style="margin-top:2rem">
+    <span class="label">The one-line spine</span>
+    Types are the review surface (C11) → hide behind opaque handles (C12) → make illegal states unrepresentable (C13) → assert the contracts types can't hold (C14) → design errors away (C15) → finish with craft (C16). <strong>Read and shape an interface so the compiler, the caller, and the LLM all fall into the pit of success.</strong>
+  </div>
+
+  <div class="nav noprint">
+    <a href="../lessons/0011-why-types-are-the-review-surface.html">← Module C lessons</a>
+    <a href="glossary.html">Glossary ↗</a>
+  </div>
+</div>
+</body>
+</html>

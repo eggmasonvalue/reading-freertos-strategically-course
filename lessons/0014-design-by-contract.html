@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 14 — Design by Contract</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 14 <span class="sep">/</span> Module C <span class="sep">/</span> enrich <span class="sep">/</span> ~14 min</p>
+  <h1>The promises the type can't make</h1>
+  <p class="lede">C13 ended on a wall C won't build. This is how the kernel builds it anyway — not in the type, but as an executable <em>precondition</em>. Design by Contract is where you recover the guarantees the type system is too weak to state — and it comes with a sharp, honest limit you must say out loud.</p>
+
+  <p class="mission"><b>Why this lesson:</b> C13 showed the type system has holes; the semaphore-as-queue misuse was one. Design by Contract (Bertrand Meyer)<sup class="cite"><a href="#s1">1</a></sup> is the disciplined way to fill them: state each routine's <em>preconditions, postconditions, invariants</em> as checkable assertions. In the AI era this does double duty — a contract is both a spec the reviewer reads and a tripwire that fires at the exact line an LLM's plausible-but-wrong call violates it.</p>
+
+  <h2>The idea — and the distinction the whole lesson turns on</h2>
+  <p>A contract splits responsibility between caller and callee, explicitly:</p>
+  <ul>
+    <li><strong>Precondition</strong> — what the <em>caller</em> must guarantee before calling (the handle is non-NULL; the item size is zero for a semaphore).</li>
+    <li><strong>Postcondition</strong> — what the <em>callee</em> guarantees on return.</li>
+    <li><strong>Invariant</strong> — what stays true across the object's whole lifetime.</li>
+  </ul>
+  <div class="callout key">
+    <span class="label">Precondition ≠ error handling (get this exactly right)</span>
+    A precondition is <strong>not</strong> error handling. Error handling copes with situations the API <em>promises to handle</em> — a full queue, a timeout — conditions that are expected and part of the contract. A precondition is a usage rule that must <em>never</em> be violated; breaking it is a <strong>bug in the caller</strong>, not a runtime condition to recover from. The consequence is a design fork: an expected failure gets a <em>return value</em> the caller must check (lesson <a href="0015-define-errors-out-of-existence.html">C15</a>); a should-never-happen violation gets an <em>assertion</em> that halts. Confusing the two produces both bugs — swallowing real usage errors, and "handling" things that can't legitimately occur.
+  </div>
+
+  <h2>Specimen: hundreds of contracts, verified</h2>
+  <p>I counted, rather than trusting the roadmap. <code>configASSERT</code> appears <strong>56 times in <code>queue.c</code></strong>, <strong>118 in <code>tasks.c</code></strong>, and <strong>264 across the kernel's <code>.c</code> files</strong>. Most kernel functions open by stating their contract:</p>
+  <pre><code><span class="cmt">/* queue.c — the precondition, executable, stated first */</span>
+BaseType_t xQueueGenericReset( QueueHandle_t xQueue, ... )
+{
+    configASSERT( pxQueue );                     <span class="cmt">/* line 311: handle MUST be non-NULL */</span>
+    ...
+}
+<span class="cmt">/* xQueueSemaphoreTake — encodes "this must be a semaphore, not a data queue" */</span>
+configASSERT( pxQueue-&gt;uxItemSize == 0 );         <span class="cmt">/* line 1355 */</span></code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/queue.c — lines 311, 1355 (counts verified by grep)</p>
+  <p>Read what each one <em>is</em>: a machine-checked sentence of the spec, placed exactly where it's owed. "You may not pass me NULL." "You may not use this semaphore handle as a data queue." These are precisely the promises C11's type couldn't encode and C13's alias couldn't enforce — now stated as code that fires the instant a caller lies. Line 1355 is the literal runtime backstop for the C13 hole: the compile-time wall was traded away, and <em>this</em> assert is where the guarantee was moved to.</p>
+
+  <div class="callout key">
+    <span class="label">The escape hatch — and the tradeoff it names</span>
+    <code>configASSERT</code> is defined by the port; if a project doesn't define it, it expands to <strong>nothing</strong>:
+    <pre style="margin:0.6rem 0 0"><code><span class="cmt">/* FreeRTOS.h:97 (verified) */</span>
+<span class="kw">#ifndef</span> configASSERT
+    <span class="kw">#define</span> configASSERT( x )        <span class="cmt">/* compiles away to zero cost */</span>
+<span class="kw">#endif</span></code></pre>
+    So contracts cost nothing in production and catch bugs in development — the same <em>documented-decision-with-a-knob</em> shape you met in <a href="0003-a-documented-decision.html">A3</a>. But state the sharp edge plainly: <strong>a precondition only protects you on builds where it's enabled.</strong> It is a development-time tripwire, not a runtime guarantee shipped to the field.
+  </div>
+
+  <h2>Where DbC sits in the stack — defence in depth</h2>
+  <p>Stack the module so far and the logic is clean: push each guarantee to the <em>cheapest layer that can hold it</em>. The <strong>type</strong> (C11) checks what it can, for free, at compile time, always. The <strong>opaque handle</strong> (C12) makes whole classes of misuse unexpressible. Where the type is too weak (C13's holes), the <strong>contract</strong> (C14) states the rule as a runtime check — and only there, for the promises the compiler genuinely can't make. A reviewer who sees a function with a non-obvious usage rule and <em>no</em> assertion asks: "where's the contract that would catch me getting this wrong?"</p>
+  <details class="deep"><summary>Deep dive — fail-fast, and why it matters more in embedded than anywhere</summary>
+  <div class="body">
+    <p>The deeper value of an assert isn't that it detects a bug — a test could do that — it's <em>where</em> and <em>when</em> it detects it: at the precise line the contract broke, before the corruption propagates. A NULL handle passed to a queue without the assert doesn't fail at the call; it fails later, somewhere in the body, after a wild write has scrambled memory — a bug whose symptom is arbitrarily far from its cause. On a desktop that's a painful debugging session; on a microcontroller with no MMU, no memory protection, and a watchdog reset as your only safety net, a propagated corruption can be <em>unreproducible</em> and safety-relevant. <code>configASSERT</code> converts "silent corruption discovered three seconds and one stack-smash later" into "halt, right here, at the guilty line." That fault-containment — fail fast, fail local — is why a safety-critical kernel spends 264 of them, and it's the same instinct as Ousterhout's "just crash" tactic in C15: for a truly impossible state, stopping is safer than limping on with corrupt invariants.</p>
+  </div></details>
+
+  <div class="callout counter">
+    <span class="label">The strongest case against leaning on Design by Contract</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>The check is gone exactly when you need it.</strong> Asserts are compiled out in release. So the contract protects the developer's bench but not the deployed product — the field failure, the one that matters, runs with the tripwire removed. That can breed false confidence: "it's asserted" feels safe while shipping unprotected.</li>
+      <li><strong>C only really does preconditions.</strong> Meyer's full DbC — postconditions, class invariants, and their inheritance semantics — needs language support C lacks. What you get in C is a pile of entry-point <code>if</code>s, not the coherent contract system Meyer designed; calling it "Design by Contract" oversells it.</li>
+      <li><strong>Asserts can mask missing error handling.</strong> A lazy author asserts a condition that is actually an <em>expected</em> runtime failure, turning a recoverable case into a crash — the precondition/error-handling confusion, weaponized.</li>
+    </ol>
+  </div>
+  <p><strong>Synthesis.</strong> Points (1) and (3) are the real risks and they sharpen the discipline rather than defeating it. On (1): the mitigation is to keep asserts enabled through every layer where bugs are still economically catchable — unit tests, integration, HIL, and often early field/beta builds — so the tripwire is present across the entire span where caller-bugs are found, and only removed once the cost (timing, footprint) genuinely dominates. The point isn't "asserts protect production"; it's "asserts collapse the distance from bug to detection everywhere you can still afford to look." On (3): the fix is the precondition/error-handling distinction above — assert only should-never-happens; return-and-handle the expected. On (2): fair — in C this is really "precondition checking," the reachable slice of Meyer's idea, and honesty about that is better than grandiosity. So DbC in C is a <em>complement</em> to types and error design, not a substitute: types for what's checkable free and always; error returns for expected failures; assertions for the impossible-if-correct, live wherever you can still catch a bug cheaply.</p>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    A function with a genuine precondition (must be non-NULL; must hold the lock; index in range) that is <em>neither</em> encoded in a type <em>nor</em> asserted — it trusts the caller and corrupts silently when trusted wrongly. Say it: <em>"This has an unstated precondition. Make it unrepresentable if you can, else assert it — don't leave it to hope."</em> And its twin: <em>"This <code>configASSERT</code> is guarding an <em>expected</em> failure — that should be a checked return, not a crash."</em> LLMs both omit precondition checks (the happy path "works") and over-assert recoverable cases; you catch both.
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <p>From memory — resist scrolling.</p>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Bertrand Meyer, <em>Design by Contract</em> (the Eiffel concept; any faithful summary of preconditions / postconditions / invariants).</strong> Then scan <code>queue.c</code> for <code>configASSERT</code> and sort ten of them into "precondition (caller bug)" vs "internal invariant (our bug)" — and find one you think should arguably be a checked return instead. (Add Meyer to <a href="../index.html#references">RESOURCES.md</a>.)</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Show me a function of yours and we'll write its contract explicitly — precondition, postcondition, invariant — decide which parts a type can hold and which need a <code>configASSERT</code>-style tripwire, and argue about which build stages should keep the asserts live. Drawing those lines <em>is</em> the skill.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Bertrand Meyer, <em>Design by Contract</em> / <em>Object-Oriented Software Construction</em> — preconditions, postconditions, class invariants.</li>
+      <li id="s2">Specimen (verified by grep): <code>configASSERT</code> counts — 56 in <code>queue.c</code>, 118 in <code>tasks.c</code>, 264 kernel-wide; examples at <code>queue.c:311,1355</code>; no-op default at <code>include/FreeRTOS.h:97–99</code>.</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0013-make-illegal-states-unrepresentable.html">← Lesson 13</a>
+    <a href="0015-define-errors-out-of-existence.html">Lesson 15 — Define Errors Out of Existence →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'What distinguishes a precondition from error handling?',
+      options: [
+        'A precondition executes faster than a checked return',
+        'A precondition is a caller bug, not an expected case',
+        'A precondition only applies inside interrupt handlers'
+      ],
+      answer: 1,
+      why: 'Error handling copes with conditions the API promises to manage (a full queue). A violated precondition is a defect in the caller \u2014 it should never happen, so it is asserted and halts, not gracefully handled.'
+    },
+    {
+      q: 'What is the sharp, honest limit of <code>configASSERT</code> contracts?',
+      options: [
+        'They slow every call even when the check passes',
+        'They are compiled out in release, when it matters most',
+        'They can only ever test a handle for being non-NULL'
+      ],
+      answer: 1,
+      why: 'The default expands to nothing, so contracts protect the bench but not the shipped product. The mitigation is keeping them enabled across every stage where bugs are still cheaply catchable \u2014 not pretending they guard production.'
+    },
+    {
+      q: 'Why does an early assert matter more on a microcontroller than on a desktop?',
+      options: [
+        'Microcontrollers cannot print error messages at all',
+        'It halts at the guilty line before corruption propagates',
+        'Release builds keep asserts enabled on microcontrollers'
+      ],
+      answer: 1,
+      why: 'With no MMU or memory protection, a propagated corruption can be unreproducible and safety-relevant. Fail-fast collapses the distance from cause to symptom \u2014 the fault-containment reason a safety kernel spends hundreds of asserts.'
+    },
+    {
+      q: 'A function asserts a condition that is actually an expected runtime failure. Objection?',
+      options: [
+        'Speed it up by removing the redundant assertion',
+        'That expected case should be a checked return, not a crash',
+        'Add a second assertion to confirm the first one'
+      ],
+      answer: 1,
+      why: 'Asserting an expected, recoverable failure turns it into a crash \u2014 the precondition/error-handling confusion weaponized. Expected failures get return values the caller checks (C15); assertions are only for should-never-happens.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

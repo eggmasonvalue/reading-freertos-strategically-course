@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 13 — Make Illegal States Unrepresentable</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 13 <span class="sep">/</span> Module C <span class="sep">/</span> enrich <span class="sep">/</span> ~15 min</p>
+  <h1>The bug the type won't let you write</h1>
+  <p class="lede">The most powerful thing a type can do is not describe a value but make a whole category of wrong values impossible to construct. This lesson shows the ideal, proves exactly where C — and FreeRTOS — cannot reach it, and prices the deliberate hole that trade left behind.</p>
+
+  <p class="mission"><b>Why this lesson:</b> "Make illegal states unrepresentable" is the maximal form of C11's <em>constrain the generator</em>: a program an author cannot express is a program you never have to review. But C's type system is weak, and today's specimen contains a real, intentional hole. Seeing the hole — understanding the exact language rule that opens it, and pricing what was bought — is the enrich-tier skill. This is a Munger lesson: <em>study where C dies so you never rely on it there.</em></p>
+
+  <h2>The principle — and its precise scope</h2>
+  <p>Type-driven design (Alexis King, "Parse, Don't Validate")<sup class="cite"><a href="#s1">1</a></sup>: rather than accept a loose value and <em>check</em> it at every use, accept a <em>narrower type</em> that can only hold valid values, and validate once — at construction — turning the checked value into a type that <em>proves</em> its own validity thereafter. The illegal state then has no representation: it is not "caught," it is <em>uninstantiable</em>.</p>
+  <p>Scope it honestly, though: this is a spectrum, not a binary, and how far you can travel depends on the language. A strong sum-type language reaches near the ideal; C reaches part way and must back the rest with runtime checks. The skill is knowing exactly how far your language goes.</p>
+
+  <div class="callout key">
+    <span class="label">The map of the walls <span style="font-weight:400">(Munger: study the far end so you can navigate the near one)</span></span>
+    In a strong-typed language you write the walls directly. A <em>sum type</em> says "exactly one of these, never two, never none," and a <em>newtype</em> makes look-alikes distinct:
+    <pre style="margin:0.6rem 0 0"><code><span class="cmt">// Rust — a value that is a queue XOR a semaphore, never confusable</span>
+<span class="kw">enum</span> Primitive { Queue(Queue), Semaphore(Semaphore) }
+<span class="cmt">// and the compiler forces you to handle BOTH arms — exhaustively:</span>
+<span class="kw">match</span> p { Primitive::Queue(q) =&gt; ..., Primitive::Semaphore(s) =&gt; ... }
+<span class="cmt">// distinct newtypes: a Receiver&lt;T&gt; simply is not a Sender&lt;T&gt;.</span></code></pre>
+    You are not being told to switch languages. You are being handed a map: <em>this</em> is the guarantee — construction-checked validity, exhaustiveness, nominal distinctness — so you can recognize precisely which piece you must hand-build when you're in C, and which piece C simply will not give you.
+  </div>
+
+  <h2>Specimen: where FreeRTOS deliberately leaves a wall down</h2>
+  <p>Open <code>./reference/FreeRTOS-Kernel/include/semphr.h</code> and <code>include/queue.h</code>:</p>
+  <pre><code><span class="cmt">/* semphr.h */</span>
+<span class="kw">typedef</span> QueueHandle_t SemaphoreHandle_t;              <span class="cmt">/* line 38 */</span>
+
+<span class="cmt">/* queue.h — all of these are the SAME type */</span>
+<span class="kw">typedef struct</span> QueueDefinition * QueueHandle_t;         <span class="cmt">/* 51 */</span>
+<span class="kw">typedef struct</span> QueueDefinition * QueueSetHandle_t;       <span class="cmt">/* 58 */</span>
+<span class="kw">typedef struct</span> QueueDefinition * QueueSetMemberHandle_t; <span class="cmt">/* 65 */</span></code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/semphr.h:38 · include/queue.h:51,58,65 (verified)</p>
+
+  <div class="callout watch">
+    <span class="label">The exact C rule that makes this a hole</span>
+    <strong><code>typedef</code> introduces an <em>alias</em>, not a new type.</strong> After <code>typedef QueueHandle_t SemaphoreHandle_t;</code> the two names denote the <em>same</em> type; C compares them structurally and finds no difference. So this compiles with no diagnostic:
+    <pre style="margin:0.6rem 0 0"><code>SemaphoreHandle_t s = xSemaphoreCreateBinary();
+xQueueSend( s, &amp;data, 0 );   <span class="cmt">/* sending DATA to a semaphore — nonsense, accepted */</span></code></pre>
+    The illegal state — "treat this semaphore as a data queue" — is fully <em>representable</em>. The type system offers no wall here at all.
+  </div>
+  <details class="deep"><summary>Deep dive — name equivalence vs structural equivalence (the jagged corner)</summary>
+  <div class="body">
+    <p>C uses <em>structural</em> equivalence for typedef aliases (same underlying type ⇒ same type) but <em>name/tag</em> equivalence for <code>struct</code>, <code>union</code>, and <code>enum</code> tags: two structs with identical members but different tags are <em>distinct</em> types. That single asymmetry is the entire basis of the C99 fix below — it's why wrapping a value in a fresh <code>struct</code> buys you a genuinely new type while a <code>typedef</code> never can. Most C developers carry a fuzzy sense that "typedef makes a type"; it does not, and knowing the difference precisely is what lets you reach for the struct-wrapper deliberately instead of hoping an alias will protect you. (This is on your list of jagged corners — worth over-learning.)</p>
+  </div></details>
+
+  <h2>Why the hole is there — and why it's a fair trade</h2>
+  <p>This is not sloppiness; it is the flip side of a decision you already admired. In lesson <a href="0002-deep-vs-shallow-modules.html">A2</a> a semaphore <em>is</em> a queue — one deep implementation reused four ways — and that reuse is <em>bought</em> by collapsing the handle types into one. FreeRTOS chose: <strong>maximal implementation reuse and a tiny public surface, at the cost of compile-time distinctness between handle kinds.</strong></p>
+  <p>Then — and this is the part the batch version glossed — it <em>buys some of the safety back at runtime.</em> The hidden struct carries a <code>ucQueueType</code> field and a <code>uxItemSize</code>, and the semaphore entry points assert on them. Verified, in <code>queue.c</code>:</p>
+  <pre><code><span class="cmt">/* xQueueSemaphoreTake — a semaphore stores zero-size items */</span>
+configASSERT( pxQueue-&gt;uxItemSize == 0 );                <span class="cmt">/* line 1355 */</span>
+<span class="cmt">/* xQueuePeekFromISR */</span>
+configASSERT( pxQueue-&gt;uxItemSize != 0 );  <span class="cmt">/* line 2150: "Can't peek a semaphore." */</span></code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/queue.c — lines 1355, 1677, 2150 (verified)</p>
+  <div class="callout key">
+    <span class="label">The full, honest picture</span>
+    The guarantee didn't vanish; it <em>moved layers</em>. What a strong type system would enforce at <em>compile time, always</em>, FreeRTOS enforces at <em>runtime, only when <code>configASSERT</code> is enabled</em> (lesson <a href="0014-design-by-contract.html">C14</a>). A strategic reviewer states both halves in one breath: <em>"the handle types are unified for reuse; distinctness is recovered at runtime via <code>uxItemSize</code>/<code>ucQueueType</code> asserts — so on a release build with asserts off, misusing a semaphore as a queue is undefined behavior with no diagnostic at all."</em> That sentence is the whole lesson: know which wall exists, at which layer, under which build.
+  </div>
+
+  <h2>What you hand-build in C99 when you <em>do</em> want the compile-time wall</h2>
+  <p>When distinctness matters more than reuse, C's escape hatch is the <strong>struct-wrapper newtype</strong> — legitimate precisely because of the tag-equivalence rule in the deep-dive above:</p>
+  <pre><code><span class="cmt">/* Give each handle kind its own real, distinct type */</span>
+<span class="kw">typedef struct</span> { QueueHandle_t h; } SemHandle_t;
+<span class="kw">typedef struct</span> { QueueHandle_t h; } DataQueue_t;
+
+<span class="cmt">/* The "parse" boundary: the ONLY way to make one is a checked constructor */</span>
+SemHandle_t SemCreate( <span class="kw">void</span> ) { SemHandle_t s = { xSemaphoreCreateBinary() }; <span class="kw">return</span> s; }
+
+<span class="kw">void</span> give( SemHandle_t s );
+give( myDataQueue );   <span class="cmt">/* ERROR: incompatible type. The wall is back. */</span></code></pre>
+  <p>Combine the wrapper (nominal distinctness) with the opaque-handle move from <a href="0012-opaque-handles-and-incomplete-types.html">C12</a> (hide the field so callers can't unwrap it), a <em>constructor</em> as the single validated entry (King's "parse" step), and <code>configASSERT</code> for the invariants the type still can't state — and you have reconstructed, by hand and on purpose, most of what a sum type would have given you free. That layering <em>is</em> the C craft: the type carries what it can, the constructor validates once, the assert covers the remainder.</p>
+
+  <div class="callout counter">
+    <span class="label">The strongest case against "make it unrepresentable" (in C)</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>Wrapper friction is real.</strong> Every struct-newtype means wrapping/unwrapping at boundaries, more constructors, and uglier call sites. In C the ergonomics are bad enough that the safety can cost more reading clarity than it buys.</li>
+      <li><strong>C can't reach the valuable part anyway.</strong> Nominal distinctness is the <em>easy</em> win; C gives you no sum types, no exhaustiveness checking, no non-null-by-construction. So you do the work and still can't express the states that actually matter — a runtime check would have covered more, for less.</li>
+      <li><strong>FreeRTOS's own choice argues against you.</strong> The most-used embedded kernel in the world looked at exactly this tradeoff and chose the <em>unified</em> type plus runtime asserts. If unrepresentability were obviously right here, they'd have wrapped.</li>
+    </ol>
+  </div>
+  <p><strong>Synthesis.</strong> The steelman is strong and it correctly bounds the technique — but it argues for <em>judgment</em>, not abstention. Point (2) is the real key: in C, reach for the compile-time wall only where nominal distinctness alone kills a <em>real, costly, silent</em> bug (mixing a raw and a sanitized string; a user-id and an account-id; a physical and a virtual address) — cases where a swap compiles, runs, and corrupts quietly. Where the meaningful illegal states are richer than "wrong nominal type," accept that C dies there and back it with <code>configASSERT</code> (C14) — which is exactly what FreeRTOS did, deliberately, and could <em>state the reason for</em>. The wrong move isn't choosing runtime checks; it's choosing them by default without knowing you had a compile-time option and declining it on purpose.</p>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    Two conceptually different things sharing one <code>typedef</code> alias where swapping them would be a silent bug — a "user id" and an "account id" both bare <code>uint32_t</code>, a sanitized and a raw string both <code>char *</code>. Say it: <em>"These are the same type to the compiler, so it will happily let us swap them — an illegal state we've left representable. If the mix is a real, silent bug, wrap each in its own struct; if not, don't pay the wrapper tax."</em> LLMs alias types constantly (they average over code that does); this is a standing review move — applied with the proportionality the steelman demands.
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <p>From memory — the effortful pull is what makes it stick.</p>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Alexis King, "Parse, Don't Validate" (2019)</strong> — the clearest statement of pushing validity into types so illegal states can't be built, and of the constructor as the one validation boundary. Then re-read <code>semphr.h:38</code> and the <code>uxItemSize</code> asserts in <code>queue.c</code>, and answer in one sentence: which guarantee did FreeRTOS move from compile time to run time, and under what build does it disappear? (See <a href="../index.html#references">RESOURCES.md</a>.)</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Bring me two types in your code that are "the same underneath but must not be swapped," and we'll decide whether the mix is a real, silent-enough bug to justify a struct-wrapper wall — and where the <code>configASSERT</code> backstop belongs for the states C can't type. Pricing that tradeoff, with the steelman in mind, <em>is</em> the skill.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Alexis King, "Parse, Don't Validate" (2019) — type-driven design; validate once at construction; make illegal states unrepresentable.</li>
+      <li id="s2">Specimen (verified): unified handle type — <code>semphr.h:38</code>, <code>queue.h:51,58,65</code>; runtime backstop — <code>queue.c:1355,1677,2150</code> (<code>uxItemSize</code> asserts). Tradeoff origin: lesson A2 (semaphore = queue).</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0012-opaque-handles-and-incomplete-types.html">← Lesson 12</a>
+    <a href="0014-design-by-contract.html">Lesson 14 — Design by Contract →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'Which exact C rule makes <code>SemaphoreHandle_t</code> and <code>QueueHandle_t</code> interchangeable?',
+      options: [
+        'A macro rewrites one handle name into the other',
+        'A typedef is an alias, so the types are equivalent',
+        'The linker deduplicates the two handle symbols'
+      ],
+      answer: 1,
+      why: 'typedef introduces an alias, not a new type; C compares the two names structurally and sees the same underlying <code>struct QueueDefinition *</code>. No macro or linker step is involved.'
+    },
+    {
+      q: 'What did FreeRTOS actually do with the semaphore/queue distinctness guarantee?',
+      options: [
+        'Eliminated it entirely for maximum performance',
+        'Moved it from compile time to runtime asserts',
+        'Enforced it with a stronger compile-time check'
+      ],
+      answer: 1,
+      why: 'The guarantee moved layers: hidden <code>uxItemSize</code>/<code>ucQueueType</code> plus <code>configASSERT</code> recover it at runtime \u2014 but only on builds where asserts are enabled, so it isn\u2019t eliminated and isn\u2019t compile-time.'
+    },
+    {
+      q: 'Why does wrapping a handle in a <code>struct</code> create a genuinely distinct type?',
+      options: [
+        'Structs are compared by tag, not by their contents',
+        'Structs cannot be passed by value in C at all',
+        'The wrapper adds a hidden runtime type tag field'
+      ],
+      answer: 0,
+      why: 'C uses name/tag equivalence for struct types \u2014 two structs with identical members but different tags are distinct. That asymmetry with typedef\u2019s structural aliasing is exactly what the newtype pattern exploits; no runtime tag is added.'
+    },
+    {
+      q: 'Per the steelman synthesis, when should you reach for a compile-time wall in C?',
+      options: [
+        'Always \u2014 unrepresentable states are strictly better',
+        'Never \u2014 C is too weak, so use asserts instead',
+        'When a silent swap of look-alikes is a real, costly bug'
+      ],
+      answer: 2,
+      why: 'Nominal distinctness is C\u2019s reachable win; spend it where a swap compiles, runs, and corrupts quietly. Where the meaningful illegal states are richer than "wrong type," accept C\u2019s limit and back it with configASSERT \u2014 judgment, not a blanket rule.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,217 @@
+/* ============================================================================
+   course.css — shared design system for the "Strategic Programmer" course.
+   Every lesson, the glossary, and reference docs link this file so the course
+   looks like one consistent thing. Tufte-inspired: serif text, generous
+   margins, restrained colour, prints cleanly.
+   ============================================================================ */
+
+:root {
+  --ink:        #1a1a1a;
+  --ink-soft:   #4a4a4a;
+  --paper:      #fdfcf9;
+  --rule:       #d9d4c7;
+  --accent:     #7a1f1f;   /* deep oxblood — links, emphasis */
+  --accent-2:   #1f4a5a;   /* teal — secondary */
+  --code-bg:    #f4f1ea;
+  --good:       #24603a;
+  --good-bg:    #e7f2ea;
+  --bad:        #8a2020;
+  --bad-bg:     #f6e7e7;
+  --note-bg:    #f0ede3;
+  --strategic:  #1f4a5a;
+  --tactical:   #8a5a1f;
+  --maxw:       42rem;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua",
+           Georgia, "Times New Roman", serif;
+  --mono: "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas,
+          "Liberation Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html { font-size: 19px; -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--serif);
+  color: var(--ink);
+  background: var(--paper);
+  line-height: 1.55;
+  margin: 0;
+  padding: 3.5rem 1.25rem 6rem;
+}
+
+.wrap { max-width: var(--maxw); margin: 0 auto; }
+
+/* ---- Course furniture -------------------------------------------------- */
+
+.kicker {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 0 0 0.6rem;
+}
+.kicker .sep { color: var(--rule); padding: 0 0.4em; }
+
+h1 { font-size: 2.05rem; line-height: 1.12; font-weight: 700; margin: 0 0 0.4rem; letter-spacing: -0.01em; }
+h2 { font-size: 1.4rem; margin: 2.4rem 0 0.6rem; letter-spacing: -0.005em; }
+h3 { font-size: 1.08rem; margin: 1.8rem 0 0.4rem; color: var(--ink); }
+
+.lede { font-size: 1.12rem; color: var(--ink-soft); font-style: italic; margin: 0 0 1.6rem; }
+
+p, li { max-width: var(--maxw); }
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid rgba(122,31,31,0.28); }
+a:hover { border-bottom-color: var(--accent); }
+
+hr.rule { border: 0; border-top: 1px solid var(--rule); margin: 2.6rem 0; }
+
+/* ---- Mission ribbon (why this lesson exists) --------------------------- */
+.mission {
+  font-size: 0.86rem;
+  color: var(--ink-soft);
+  border-left: 3px solid var(--accent);
+  padding: 0.35rem 0 0.35rem 0.9rem;
+  margin: 0 0 2rem;
+}
+.mission b { color: var(--ink); font-weight: 600; }
+
+/* ---- Callouts ---------------------------------------------------------- */
+.callout {
+  background: var(--note-bg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 0.9rem 1.1rem;
+  margin: 1.4rem 0;
+  font-size: 0.96rem;
+}
+.callout .label {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  display: block;
+  margin-bottom: 0.3rem;
+}
+.callout.key   { background: #f3efe0; border-color: #e0d9bf; }
+.callout.key .label { color: var(--accent); }
+.callout.watch { background: var(--bad-bg); border-color: #e6cccc; }
+.callout.watch .label { color: var(--bad); }
+
+/* ---- Deep vs shallow / strategic vs tactical chips --------------------- */
+.chip {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  padding: 0.08em 0.5em;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.chip.strategic { background: #e4eef1; color: var(--strategic); }
+.chip.tactical  { background: #f3e9da; color: var(--tactical); }
+.chip.deep      { background: var(--good-bg); color: var(--good); }
+.chip.shallow   { background: var(--bad-bg); color: var(--bad); }
+
+/* ---- Two-column compare ------------------------------------------------ */
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.4rem 0; }
+.compare > div { border: 1px solid var(--rule); border-radius: 6px; padding: 0.8rem 1rem; }
+.compare h4 { margin: 0 0 0.5rem; font-family: var(--mono); font-size: 0.8rem; letter-spacing: 0.04em; }
+.compare .col-good h4 { color: var(--good); }
+.compare .col-bad  h4 { color: var(--bad); }
+@media (max-width: 40rem) { .compare { grid-template-columns: 1fr; } }
+
+/* ---- Code -------------------------------------------------------------- */
+pre, code { font-family: var(--mono); }
+code { background: var(--code-bg); padding: 0.08em 0.34em; border-radius: 3px; font-size: 0.86em; }
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 0.9rem 1.1rem;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+pre code { background: none; padding: 0; font-size: inherit; }
+pre .cmt { color: #7a7566; font-style: italic; }
+pre .kw  { color: var(--accent); }
+pre .fn  { color: var(--accent-2); }
+.filecite {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  display: block;
+  margin: -0.6rem 0 1.4rem;
+}
+
+/* ---- Citations / sources ---------------------------------------------- */
+.src { font-size: 0.82rem; color: var(--ink-soft); }
+sup.cite { font-size: 0.7rem; line-height: 0; }
+sup.cite a { border: 0; color: var(--accent-2); }
+.sources { border-top: 1px solid var(--rule); margin-top: 2.4rem; padding-top: 1rem; font-size: 0.85rem; }
+.sources ol { padding-left: 1.2rem; }
+.sources li { margin-bottom: 0.4rem; color: var(--ink-soft); }
+
+/* ---- Primary source box ------------------------------------------------ */
+.primary {
+  border: 2px solid var(--accent-2);
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  margin: 2rem 0;
+  background: #eef4f6;
+}
+.primary .label { font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-2); }
+
+/* ---- Ask-your-teacher reminder ---------------------------------------- */
+.ask {
+  margin: 2.2rem 0 0;
+  padding: 0.9rem 1.1rem;
+  border: 1px dashed var(--accent);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  background: #fbf4f4;
+}
+.ask b { color: var(--accent); }
+
+/* ---- Footer nav -------------------------------------------------------- */
+.nav { display: flex; justify-content: space-between; gap: 1rem; margin-top: 3rem; font-family: var(--mono); font-size: 0.8rem; }
+.nav a { border: 0; }
+
+/* ---- Deep-dive: opt-in depth (surface stays small; fold goes deep) ----- */
+details.deep {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  margin: 1.4rem 0;
+  background: #faf8f2;
+}
+details.deep > summary {
+  cursor: pointer;
+  padding: 0.7rem 1.1rem;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  list-style: none;
+}
+details.deep > summary::-webkit-details-marker { display: none; }
+details.deep > summary::before { content: "\25B8  "; }
+details.deep[open] > summary::before { content: "\25BE  "; }
+details.deep[open] > summary { border-bottom: 1px solid var(--rule); }
+details.deep .body { padding: 0.6rem 1.1rem 0.4rem; font-size: 0.95rem; }
+details.deep .body > *:first-child { margin-top: 0.4rem; }
+
+/* ---- Counterpoint / steelman callout (the strongest case against) ------ */
+.callout.counter { background: #eef4f6; border-color: #cfe0e6; }
+.callout.counter .label { color: var(--accent-2); }
+
+/* ---- Print ------------------------------------------------------------- */
+@media print {
+  details.deep { break-inside: avoid; }
+  details.deep[open] > summary { border-bottom: 1px solid #ccc; }
+  body { background: #fff; color: #000; padding: 0; font-size: 11.5pt; }
+  a { color: #000; border: 0; }
+  .quiz button, .ask { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .nav { display: none; }
+  pre, .callout, .primary, .compare > div { break-inside: avoid; }
+}

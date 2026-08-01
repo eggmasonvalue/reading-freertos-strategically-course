@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 1 — Tactical vs Strategic</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 01 <span class="sep">/</span> Module A <span class="sep">/</span> ~11 min</p>
+  <h1>The word for your edge: <em>strategic</em></h1>
+  <p class="lede">Before you can review code well, you need the one distinction that organises everything else — and, conveniently, it's the distinction your whole career pivot is named after. This lesson installs it precisely: what it claims, what it pointedly does <em>not</em>, and the strongest case against it.</p>
+
+  <p class="mission"><b>Why this lesson:</b> Your mission is to be the person whose judgment turns an LLM into a force multiplier instead of a slop machine. That judgment has a name and a literature. This lesson installs the vocabulary; every later lesson spends it.</p>
+
+  <h2>The one distinction</h2>
+  <p>John Ousterhout splits all programming into two mindsets.<sup class="cite"><a href="#s1">1</a></sup></p>
+
+  <div class="compare">
+    <div class="col-bad">
+      <h4><span class="chip tactical">tactical</span></h4>
+      <p>The goal is to <strong>get it working</strong>. Each feature or fix is judged by "does it run?" Design is whatever falls out. Fast today.</p>
+    </div>
+    <div class="col-good">
+      <h4><span class="chip strategic">strategic</span></h4>
+      <p>Working code is <strong>necessary but not sufficient</strong>. You spend a little extra, continuously, so the <em>design</em> stays clean. Slightly slower today, dramatically faster for the codebase's whole life.</p>
+    </div>
+  </div>
+
+  <p>Ousterhout's sharpest character is the <strong>tactical tornado</strong>: the developer who "pumps out code far faster than others" in a totally tactical fashion, is treated as a hero by distant managers, and "leaves behind a wake" of complexity that everyone else must clean up.<sup class="cite"><a href="#s2">2</a></sup></p>
+
+  <div class="callout key">
+    <span class="label">What the distinction does <em>not</em> claim</span>
+    Strategic is <strong>not</strong> "slow down and gold-plate," not big-design-up-front, and not "speed is bad." Ousterhout's own estimate is that the strategic tax is small and continuous — on the order of ~10–20% of your time invested in design, paid as you go, not a separate phase.<sup class="cite"><a href="#s3">3</a></sup> The claim is narrow and about <em>time horizon</em>: over the life of a codebase the continuous small investment wins, because complexity you don't pay down compounds. It says nothing about any single afternoon, a throwaway script, or a spike. Hold that scope — the rest of the lesson defends exactly it.
+  </div>
+
+  <div class="callout key">
+    <span class="label">The AI-era reframe</span>
+    An LLM is a tactical tornado with infinite stamina. It produces working code faster than any human, and — left unsupervised — accretes complexity just as fast. That is exactly why <em>tactical</em> skill is being commoditised and <em>strategic</em> skill is now the whole job. You are no longer the one typing; you are the one keeping the design coherent.
+  </div>
+
+  <h2>Why "working" isn't the finish line</h2>
+  <p>Ousterhout's core claim: the enemy is <strong>complexity</strong> — anything about a system's structure that makes it hard to understand or change. It has two roots: <strong>dependencies</strong> and <strong>obscurity</strong>.<sup class="cite"><a href="#s1">1</a></sup> Crucially, complexity is <em>incremental</em>. No single shortcut sinks you; a few hundred of them, each individually defensible, do. And by then it's too expensive to schedule a fix.<sup class="cite"><a href="#s3">3</a></sup></p>
+  <p>This is why "it works" is a trap. Working code with quietly rising complexity looks identical to healthy code — right up until change becomes glacial. The strategic programmer's job is to <em>see</em> the complexity while it's still cheap. That seeing is a learnable skill, and it starts with three named symptoms.</p>
+
+  <details class="deep"><summary>Deep dive — why complexity is a compounding cost, not a linear one</summary>
+  <div class="body">
+    <p>The reason "a few hundred defensible shortcuts" sinks you, while one never does, is that the costs <em>multiply</em> rather than add. Each shortcut raises the probability that the <em>next</em> change touches it, misunderstands it, or adds another shortcut on top of it. Dependencies compose: a module coupled to three others isn't three units of cost, it's the cost of reasoning about their combined states. So the complexity curve bends upward — early on the interest is invisible, then it dominates. This is also why the fix has a deadline: refactoring is cheap while dependencies are few and someone still holds the theory of the code in their head (lesson <a href="0009-isolate-what-changes.html">B9</a>), and expensive once neither is true. The strategic investment is really a bet that paying compounding interest down early beats paying it at the end — the same logic Munger applies to money, applied to code.</p>
+  </div></details>
+
+  <h2>The three symptoms of complexity</h2>
+  <p>You detect complexity not by "code smell" vibes but by three specific tells.<sup class="cite"><a href="#s1">1</a></sup> Learn these as a checklist — you'll apply them to real FreeRTOS code next lesson.</p>
+  <ul>
+    <li><strong>Change amplification</strong> — a conceptually simple change forces edits in many places. (You wanted to change one thing; you changed twelve.)</li>
+    <li><strong>Cognitive load</strong> — how much a developer must hold in their head to make a change safely. More is worse, even if it's "elegant."</li>
+    <li><strong>Unknown unknowns</strong> — it isn't even obvious <em>what</em> you must change or <em>what</em> you must know to change it safely. Ousterhout calls this the worst, because you can't fix what you can't see.</li>
+  </ul>
+
+  <h2>The strongest case against (steelman)</h2>
+  <p>You wanted to know <em>why</em> received wisdom is true, which means taking its opposition seriously. Here is the best case <em>against</em> "be strategic," made as its advocates would — followed by an honest synthesis, not a dismissal.</p>
+  <div class="callout counter">
+    <span class="label">The case against</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>Most code is thrown away.</strong> Startups pivot; features get cut; scripts run once. Design investment in code that dies next quarter is pure waste — the tactical tornado who shipped the thing that found product-market fit was <em>right</em>, and the careful engineer polishing a doomed module was wrong.</li>
+      <li><strong>Speed is sometimes the only thing that matters.</strong> Being first, hitting the demo, beating a competitor to a contract — these can dominate every long-term maintenance cost, because there is no long term if you lose now.</li>
+      <li><strong>"Strategic" is the perfect alibi for over-engineering.</strong> The same word justifies speculative abstraction, framework-building, and gold-plating — YAGNI exists precisely because "designing for the future" so often buys flexibility no one ever uses (lesson <a href="0009-isolate-what-changes.html">B9</a>'s over-engineering trap).</li>
+    </ol>
+  </div>
+  <p><strong>The synthesis.</strong> Every point is true, and none contradicts the thesis <em>as scoped</em>. The claim was never "always invest" — it was that the investment wins <em>over a codebase's life</em>, which presumes the codebase <em>has</em> a life. Point (1) and (2) are correct exactly when it doesn't: a throwaway script or a win-now sprint has a short horizon, so the strategic tax has little time to pay off — spend tactically on purpose, eyes open. The failure is not choosing tactical; it's choosing it <em>by default and permanently</em>, so a codebase you'll maintain for years accretes the interest anyway. Point (3) is the sharpest: it's a warning that "strategic" is a word you must keep honest. The whole rest of this course is that discipline — every principle comes paired with where it <em>dies</em> (its Munger inversion), precisely so "strategic" means "reduces complexity here, now" and never "adds machinery for a future that may not come."</p>
+
+  <div class="callout key">
+    <span class="label">The inversion that names your job</span>
+    Munger: "All I want to know is where I'm going to die, so I'll never go there." Invert the goal. Instead of asking "how do I write good code?", ask "what makes a codebase slowly become impossible to change?" — and never do those things. The answer is the three symptoms below. That is the whole of strategic review stated backwards: you are the person who spots change-amplification, cognitive load, and unknown-unknowns <em>while they are still cheap to remove</em>, in your code and in an LLM's.
+  </div>
+
+  <div class="callout">
+    <span class="label">Specimen preview</span>
+    The FreeRTOS kernel (<code>./reference/FreeRTOS-Kernel/</code>) has survived 20 years of change across hundreds of chips. That longevity is not luck — it is what <em>low complexity</em> looks like from the outside. Next lesson you'll open the door and see the mechanism: <a href="0002-deep-vs-shallow-modules.html">deep modules</a>.
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <p>Answer from memory before revealing — the effort is the point.</p>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 1–3.</strong> The definitive treatment of tactical vs strategic and the nature of complexity. If you read one thing this week, read Chapter 3 ("Working Code Isn't Enough"). Free faithful companion notes: <a href="https://www.mattduck.com/2021-04-a-philosophy-of-software-design">mattduck.com</a>; author talk: <a href="https://www.youtube.com/watch?v=lz451zUlF-k">YouTube</a>.</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Stuck on why "somewhat general-purpose" beats "exactly what I need today"? Want me to pull a tactical-vs-strategic example straight out of a file in <code>./reference/</code>? Ask a follow-up and we'll dig in.
+  </div>
+
+  <div class="sources">
+    <p class="group" style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Ousterhout, J., <em>A Philosophy of Software Design</em>, ch. 1–2 (complexity, dependencies, obscurity, the three symptoms). Summary: <a href="https://www.mattduck.com/2021-04-a-philosophy-of-software-design">mattduck.com</a>.</li>
+      <li id="s2">Ibid., ch. 3, "the tactical tornado." Quoted in <a href="https://smlx.dev/posts/book-review-ousterhout-philosophy-software-design">smlx.dev book review</a>.</li>
+      <li id="s3">On the size of the investment (~10–20%, paid continuously) and complexity accumulating incrementally: Ousterhout, ch. 3 ("Working Code Isn't Enough" / the investment mindset). Companion notes: <a href="https://www.mattduck.com/2021-04-a-philosophy-of-software-design">mattduck reading notes</a>.</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="../reference/glossary.html">Glossary ↗</a>
+    <a href="0002-deep-vs-shallow-modules.html">Lesson 2 — Deep vs Shallow Modules →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'Which best captures the strategic mindset?',
+      options: [
+        'Working code is the finishing line for a change',
+        'Working code is required but not the whole goal',
+        'Working code matters far less than a clean design'
+      ],
+      answer: 1,
+      why: 'Strategic programming holds both: the code must work <em>and</em> the design must stay clean. It does not devalue working code, nor treat it as sufficient.'
+    },
+    {
+      q: 'A one-line change forces edits across nine files. Which symptom is this?',
+      options: [
+        'Change amplification is the symptom on show',
+        'Cognitive overload is the symptom on show',
+        'The unknown unknowns are the symptom here'
+      ],
+      answer: 0,
+      why: 'One conceptual change rippling into many edits is <strong>change amplification</strong>. Cognitive load is how much you must know; unknown unknowns is not even knowing what to touch.'
+    },
+    {
+      q: 'Why is an unsupervised LLM well described as a "tactical tornado"?',
+      options: [
+        'It writes buggy code that rarely ever compiles',
+        'It ships working code fast while accreting complexity',
+        'It refuses to work on any large legacy codebases'
+      ],
+      answer: 1,
+      why: 'Like the tornado, it produces working code faster than anyone and leaves rising complexity in its wake — which is precisely why your strategic supervision is the value.'
+    },
+    {
+      q: 'The strongest case against being strategic notes most code is thrown away. Best response?',
+      options: [
+        'Agree fully and treat tactical coding as the safe default',
+        'It holds for short horizons; long-lived code still compounds',
+        'Deny it outright; all code deserves the same design care'
+      ],
+      answer: 1,
+      why: 'The thesis is scoped to a codebase\u2019s whole life, so a throwaway script or a win-now sprint is a fair tactical choice. The trap is defaulting to tactical on code you will maintain for years, where the interest compounds.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

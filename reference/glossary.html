@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glossary — Strategic Programmer</title>
+<link rel="stylesheet" href="../assets/course.css">
+<style>
+  .term { border-top: 1px solid var(--rule); padding: 1rem 0 0.4rem; }
+  .term:first-of-type { border-top: 0; }
+  .term dt { font-weight: 700; font-size: 1.05rem; }
+  .term dt .from { font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); margin-left: 0.5em; }
+  .term dd { margin: 0.3rem 0 0; color: var(--ink); }
+  .term dd .ex { display:block; margin-top: 0.35rem; font-size: 0.88rem; color: var(--ink-soft); }
+  .group { font-family: var(--mono); font-size:0.72rem; letter-spacing:0.12em; text-transform:uppercase; color: var(--accent); margin: 2.4rem 0 0.4rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Reference <span class="sep">/</span> Glossary</p>
+  <h1>Glossary</h1>
+  <p class="lede">The shared vocabulary of the course. Every lesson uses these words precisely — that precision is itself the skill. Terms tagged <b>Ousterhout</b> come from <em>A Philosophy of Software Design</em>; <b>FreeRTOS</b> terms are specimen vocabulary you need only as far as a lesson requires.</p>
+
+  <p class="group">Strategic-design vocabulary</p>
+  <dl>
+    <div class="term"><dt>Strategic programming <span class="from">Ousterhout</span></dt>
+      <dd>A mindset where working code is necessary but not sufficient; you invest ongoing effort in the <em>design</em> so complexity stays low over the codebase's life. Contrast with tactical.
+      <span class="ex">The AI-era edge: LLMs supply working code cheaply; your value is keeping the design coherent.</span></dd></div>
+
+    <div class="term"><dt>Tactical programming <span class="from">Ousterhout</span></dt>
+      <dd>A short-term mindset optimised for getting the next feature/fix working now, accreting complexity. The "tactical tornado" ships fast and leaves a mess others clean up.</dd></div>
+
+    <div class="term"><dt>Complexity <span class="from">Ousterhout</span></dt>
+      <dd>Anything about a system's structure that makes it hard to understand or modify. It has two root causes: <strong>dependencies</strong> and <strong>obscurity</strong>. It is felt, not counted — measured by the effort to make a change.</dd></div>
+
+    <div class="term"><dt>Dependency <span class="from">Ousterhout</span></dt>
+      <dd>When code cannot be understood or changed in isolation — a change here forces a change there. Not inherently bad; the goal is to reduce their number and make the remaining ones obvious.</dd></div>
+
+    <div class="term"><dt>Obscurity <span class="from">Ousterhout</span></dt>
+      <dd>When important information is not obvious — a name that misleads, a convention you must know but can't see, a dependency with no signal. The other root of complexity.</dd></div>
+
+    <div class="term"><dt>Symptoms of complexity <span class="from">Ousterhout</span></dt>
+      <dd>Three tells: <strong>change amplification</strong> (a simple change touches many places), <strong>cognitive load</strong> (how much you must know to make a change), and <strong>unknown unknowns</strong> (it isn't obvious what you must change — the worst).</dd></div>
+
+    <div class="term"><dt>Module / interface / implementation <span class="from">Ousterhout</span></dt>
+      <dd>A <strong>module</strong> is any unit with an interface and an implementation (a class, a file, a service). The <strong>interface</strong> is what a caller must know to use it; the <strong>implementation</strong> is the code that fulfils it.</dd></div>
+
+    <div class="term"><dt>Deep module <span class="from">Ousterhout</span></dt>
+      <dd>A module whose interface is small relative to the functionality it provides. A powerful capability behind a tiny door. The single most important idea in the course.
+      <span class="ex">Specimen: <code>xQueueSend / xQueueReceive</code> — a few args hide blocking, timeouts, task lists, and context switches.</span></dd></div>
+
+    <div class="term"><dt>Shallow module <span class="from">Ousterhout</span></dt>
+      <dd>A module whose interface is large relative to what it does — you pay nearly the full cost of the implementation just to use it. Often a thin pass-through wrapper. A net negative: its cost exceeds its benefit.</dd></div>
+
+    <div class="term"><dt>Information hiding <span class="from">Ousterhout</span></dt>
+      <dd>Embedding design decisions inside a module's implementation so they don't appear in its interface. The primary technique for making modules deep.</dd></div>
+
+    <div class="term"><dt>Information leakage <span class="from">Ousterhout</span></dt>
+      <dd>When a design decision shows up in more than one module — e.g. two modules that both must know a file format. Callers become coupled to knowledge they shouldn't need. The opposite of information hiding.</dd></div>
+
+    <div class="term"><dt>Connascence <span class="from">Page-Jones / Weirich</span></dt>
+      <dd>A ruler for coupling: two components are <em>connascent</em> if changing one forces a change in the other. Ranked by <strong>strength</strong> (name → type → meaning → position → algorithm → the dynamic forms) and judged by <strong>locality</strong> (strong coupling is fine locally, costly across a boundary) and <strong>degree</strong>. The strategic move: convert a stronger form into a weaker one. Full ranking in <a href="connascence.html">the cheat-sheet</a>.
+      <span class="ex">Specimen: positional args of <code>xQueueGenericSend</code> (position); <code>queueSEND_TO_BACK</code> naming a magic <code>0</code> (meaning→name).</span></dd></div>
+
+    <div class="term"><dt>Obviousness <span class="from">Ousterhout</span></dt>
+      <dd>The property that a reader can understand code and interfaces quickly and correctly. If something is <em>not</em> obvious, that is a red flag — the cost is paid by every future reader (now including LLMs).</dd></div>
+
+    <div class="term"><dt>General-purpose vs special-purpose <span class="from">Ousterhout</span></dt>
+      <dd>"Somewhat general-purpose" interfaces tend to be simpler and deeper than interfaces specialised to today's single caller. Over-specialisation is a common source of shallowness.</dd></div>
+
+    <div class="term"><dt>Opaque handle <span class="from">Pattern</span></dt>
+      <dd>A caller-held token (typically a typedef'd pointer to an incomplete type) that represents an object whose fields are hidden. Information hiding for C.
+      <span class="ex">Specimen: <code>TaskHandle_t</code>, <code>QueueHandle_t</code> — you hold it, you can't see inside it.</span></dd></div>
+
+    <div class="term"><dt>Incomplete type <span class="from">C / Pattern</span></dt>
+      <dd>A type that is named but whose size and members are not (yet) declared — e.g. a forward-declared <code>struct QueueDefinition;</code> with no body in the header. You may form and pass a <em>pointer</em> to it, but the compiler forbids dereferencing it or touching a field. This is the compiler-enforced wall that makes an opaque handle real.
+      <span class="ex">Specimen: <code>queue.h</code> declares <code>struct QueueDefinition;</code>; the body lives only in <code>queue.c</code>.</span></dd></div>
+
+    <div class="term"><dt>Transparent type <span class="from">Pattern (anti-pattern)</span></dt>
+      <dd>The opposite of opaque: a struct whose full definition sits in a public header, so every caller can touch every field and the memory layout becomes de-facto public API. A prime source of information leakage — and the default an LLM reaches for so a caller can "just access X directly." Turning a transparent type opaque is a high-value review edit.</dd></div>
+  </dl>
+
+  <p class="group">Specimen vocabulary (FreeRTOS — as needed only)</p>
+  <dl>
+    <div class="term"><dt>Kernel <span class="from">FreeRTOS</span></dt>
+      <dd>The core that decides which task runs and provides tasks, queues, semaphores, and timers. Our specimen lives in <code>./reference/FreeRTOS-Kernel/</code>.</dd></div>
+
+    <div class="term"><dt>Task <span class="from">FreeRTOS</span></dt>
+      <dd>An independent thread of execution with its own stack, managed by the scheduler. Represented to callers by an opaque <code>TaskHandle_t</code>.</dd></div>
+
+    <div class="term"><dt>Queue <span class="from">FreeRTOS</span></dt>
+      <dd>The kernel's central data structure for passing data between tasks (and ISRs), with optional blocking. Notably, semaphores and mutexes are <em>built on</em> queues.</dd></div>
+
+    <div class="term"><dt>Semaphore / mutex <span class="from">FreeRTOS</span></dt>
+      <dd>Synchronisation primitives. In FreeRTOS a <code>SemaphoreHandle_t</code> is literally a <code>QueueHandle_t</code> — a deep-module reuse we study directly.</dd></div>
+
+    <div class="term"><dt>Hungarian prefix convention <span class="from">FreeRTOS</span></dt>
+      <dd>The kernel's naming scheme where a prefix encodes type/return (<code>x</code>=BaseType/struct, <code>ul</code>=unsigned long, <code>pv</code>=void*, <code>pd</code>=macro constant, <code>v</code>=void return). A convention that must be known — an obviousness tradeoff we critique, not worship.</dd></div>
+
+    <div class="term"><dt><code>configLIST_VOLATILE</code> <span class="from">FreeRTOS</span></dt>
+      <dd>A config knob in <code>list.h</code> that lets a port re-add the <code>volatile</code> qualifier the kernel deliberately omits. Our exhibit A of a documented design decision with an escape hatch.</dd></div>
+  </dl>
+
+  <div class="nav">
+    <a href="../lessons/0001-tactical-vs-strategic.html">← Lesson 1</a>
+    <a href="../index.html#about">Mission</a>
+  </div>
+</div>
+</body>
+</html>

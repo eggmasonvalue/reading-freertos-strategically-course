@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 12 — Opaque Handles & Incomplete Types</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 12 <span class="sep">/</span> Module C <span class="sep">/</span> ~15 min</p>
+  <h1>A handle you can't open</h1>
+  <p class="lede">C has no <code>private</code> keyword, yet the kernel hides an entire data structure from every caller and the <em>compiler itself</em> enforces it. This lesson is the mechanism behind that — precisely why it works, exactly what it costs, and when the cost is not worth paying.</p>
+
+  <p class="mission"><b>Why this lesson:</b> C11 argued a type is a <em>wall for the generator</em> and the <em>machine-checked</em> contract. The opaque handle is that argument made concrete in a language with no access control: it turns "you may not touch my internals" from a code-review plea into a <em>compile error</em>. But it is a tradeoff, not a free good — and a strategic reviewer must be able to price both sides.</p>
+
+  <h2>Specimen: the queue you're structurally forbidden to see</h2>
+  <p>Two files. First, the entire public face of a queue — <code>./reference/FreeRTOS-Kernel/include/queue.h</code>:</p>
+  <pre><code><span class="cmt">/* queue.h — the PUBLIC face, all a caller ever gets */</span>
+<span class="kw">struct</span> QueueDefinition;   <span class="cmt">/* forward declaration only — no body */</span>
+<span class="kw">typedef struct</span> QueueDefinition * QueueHandle_t;</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/queue.h — lines 50–51 (verified)</p>
+  <p>The caller sees the <em>name</em> of a struct and a pointer to it — nothing else. The body lives in a different translation unit entirely — <code>./reference/FreeRTOS-Kernel/queue.c</code>:</p>
+  <pre><code><span class="cmt">/* queue.c — the PRIVATE body, invisible to every caller */</span>
+<span class="kw">typedef struct</span> QueueDefinition {  <span class="cmt">/* comment: old name kept so debuggers still work */</span>
+    int8_t * pcHead, * pcWriteTo;                 <span class="cmt">/* storage cursors      */</span>
+    <span class="kw">union</span> { QueuePointers_t xQueue;
+            SemaphoreData_t xSemaphore; } u;      <span class="cmt">/* queue OR semaphore   */</span>
+    List_t xTasksWaitingToSend, xTasksWaitingToReceive;
+    <span class="kw">volatile</span> UBaseType_t uxMessagesWaiting;
+    UBaseType_t uxLength, uxItemSize;
+    <span class="kw">volatile</span> int8_t cRxLock, cTxLock;             <span class="cmt">/* + config-gated fields */</span>
+} xQUEUE;</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/queue.c — lines 103–136 (abridged, verified)</p>
+
+  <h2>The mechanism — precisely why the wall holds</h2>
+  <p>Because the header only <em>forward-declares</em> <code>struct QueueDefinition</code>, at every call site that struct is an <strong>incomplete type</strong>: a type whose name is known but whose size and members are not. The C standard is exact about what you may and may not do with one, and that asymmetry is the whole trick:</p>
+  <div class="compare">
+    <div class="col-good">
+      <h4><span class="chip deep">allowed</span> on an incomplete type</h4>
+      <p>Form and pass a <em>pointer</em> to it (all object pointers have known size/representation), store it, compare it, return it. Everything the caller legitimately needs.</p>
+    </div>
+    <div class="col-bad">
+      <h4><span class="chip shallow">forbidden</span> by the compiler</h4>
+      <p><code>handle->uxLength</code> (needs member layout), <code>*handle</code> to copy it, <code>sizeof(*handle)</code> (needs size). The moment a caller reaches inside, translation <em>fails</em>.</p>
+    </div>
+  </div>
+  <div class="callout key">
+    <span class="label">Read this carefully — it's the crux</span>
+    The hiding is not convention, documentation, or discipline. It is a <strong>property of the type system</strong>: to access a member the compiler must know the layout, and you have deliberately withheld the layout from that translation unit. So the guarantee "callers cannot depend on my internals" is enforced by <code>cc</code>, on every build, with no reviewer in the loop. <em>That</em> is C11's "machine-checked wall," realized in the one mechanism C gives you for it.
+  </div>
+  <details class="deep"><summary>Deep dive — why a pointer to incomplete type is fine but a value isn't</summary>
+  <div class="body">
+    <p>A pointer is a fixed-size, fixed-representation object regardless of what it points at — the compiler can allocate, copy, and pass it knowing only "it's a pointer." Member access (<code>-&gt;</code>), dereference-to-copy (<code>*p</code>), and <code>sizeof(*p)</code> all require the <em>pointee's</em> layout, which an incomplete type doesn't provide. This is exactly the seam the pattern exploits: expose the thing whose handling needs no layout (the pointer), withhold the thing whose handling would (the body). It's also why the constructor must live on the <em>inside</em> — only <code>queue.c</code> knows <code>sizeof(Queue_t)</code>, so only it (or the allocator it calls) can create one. The caller literally cannot, and that inability is the feature.</p>
+  </div></details>
+
+  <h2>Read the payoff through C11's four blades</h2>
+  <ul>
+    <li><strong>Wall for the generator.</strong> An LLM cannot emit <code>q->uxMessagesWaiting++</code> to "optimize" — it will not compile. The only path through is the published functions (<code>uxQueueMessagesWaiting()</code>). The type <em>forecloses</em> a whole genre of plausible slop before review.</li>
+    <li><strong>Machine-checked, forever.</strong> Every hidden field — the two waiting-lists, the lock counters, the <code>union</code> that makes a queue and a semaphore the same struct (lesson <a href="0002-deep-vs-shallow-modules.html">A2</a>) — can change freely in <code>queue.c</code> and <em>no caller can break</em>, because none could depend on it. The seam is compiler-guarded, not hope-guarded.</li>
+    <li><strong>Durable / ABI-stable.</strong> Add a field, reorder the struct, swap the <code>union</code> layout — the interface the caller compiled against (a pointer) is unchanged. (See the ABI deep-dive.)</li>
+    <li><strong>Density.</strong> The caller reasons about one word — "a queue" — instead of eleven fields. Eleven fields of cognitive load, hidden behind a single token.</li>
+  </ul>
+  <details class="deep"><summary>Deep dive — the second-order win: ABI stability and separate compilation</summary>
+  <div class="body">
+    <p>Because callers only ever see a pointer, the kernel's binary layout of <code>struct QueueDefinition</code> is <em>not</em> part of its application binary interface. Concretely: FreeRTOS can ship a precompiled kernel, add a field to the queue struct in a point release, and your application object files — compiled against the old header — still link and run, because nothing in them encoded the struct's size or field offsets. Turn the struct transparent and that property evaporates: the field offsets are now baked into every caller's object code, so any change forces a full recompile of the world and silently corrupts any binary that wasn't rebuilt. Opaqueness is what makes independent recompilation and binary distribution safe. For a kernel used across thousands of projects and toolchains, that is not a nicety — it's load-bearing.</p>
+  </div></details>
+  <p><em>A revealing detail:</em> the struct's comment — "<em>old naming convention kept so as not to break kernel-aware debuggers</em>" — shows the hiding is deliberately <em>one-way</em>. Opaque to normal C callers; still named so a debugger can crack it open. Hiding is aimed at <em>callers who might create dependencies</em>, not at maintainers who need to see in. That precision is itself a documented decision (lesson <a href="0003-a-documented-decision.html">A3</a>).</p>
+
+  <h2>The honest price (there is always one)</h2>
+  <p>Opacity is not free, and pretending it is would fail C11's own "state the tradeoff" test. What it costs:</p>
+  <ul>
+    <li><strong>Allocation moves inside.</strong> The caller can't know <code>sizeof</code>, so it <em>cannot stack-allocate a queue</em>. Someone else must allocate. This is <em>exactly</em> why the kernel ships <code>xQueueCreate</code> (heap) and <code>xQueueCreateStatic</code> (you hand it a buffer): the second API exists <em>because</em> the type is opaque. The pattern created an API obligation.</li>
+    <li><strong>Indirection and no inlining.</strong> Every access goes through a function call across a translation-unit boundary; the compiler can't inline field reads it can't see. A measurable, if usually small, cost.</li>
+    <li><strong>More ceremony.</strong> You must write and maintain accessor functions for anything callers legitimately need (<code>uxQueueMessagesWaiting()</code> exists so callers can read a count they can't reach directly).</li>
+  </ul>
+
+  <div class="callout counter">
+    <span class="label">The strongest case against opaque handles</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>Premature hiding is real complexity.</strong> For a two-caller internal helper, an opaque type + constructor + accessors is <em>more</em> code and indirection than just exposing a plain struct. You can pay information-hiding tax where there's no information worth hiding.</li>
+      <li><strong>It fights the debugger and the optimizer.</strong> Opaque types make some tooling and inlining harder; a transparent struct behind a "don't touch these fields" convention gets you 80% of the discipline with none of the indirection.</li>
+      <li><strong>The compiler's help is coarse.</strong> Opacity stops <em>member access</em>, but it doesn't make illegal <em>states</em> unrepresentable (lesson <a href="0013-make-illegal-states-unrepresentable.html">C13</a>) — you can still pass the wrong handle. It's one specific wall, not a fortress.</li>
+    </ol>
+  </div>
+  <p><strong>Synthesis.</strong> Every point is true, and each one sharpens <em>when</em> to reach for the pattern rather than refuting it. Opacity earns its cost precisely at a <strong>published, widely-used, ABI-stable boundary with many callers you don't control</strong> — which is exactly the kernel's situation, and exactly why FreeRTOS pays the tax here. For an internal helper with two callers in the same file, the steelman is correct: a plain struct is the deeper choice, and hiding would be ceremony. So the rule isn't "always hide"; it's "hide in proportion to the number of callers and the stability you must promise them." That proportionality <em>is</em> the judgment — reflexively opaque everywhere is as junior as reflexively transparent everywhere.</p>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    A struct definition sitting in a <em>public header</em> whose fields callers have no business touching — especially one an LLM emitted "so the caller can read X directly." Say it: <em>"This type is transparent — its layout is now every caller's dependency and part of our ABI. If this is a published boundary, forward-declare it, move the body to the <code>.c</code>, and expose the accessor we actually need."</em> And its inverse, so you're not dogmatic: <em>"This is a 2-caller internal helper — the opaque wrapper is ceremony here; a plain struct is clearer."</em></p>
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <p>From memory — resist scrolling back; the effort is the point.</p>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 5 ("Information Hiding and Leakage").</strong> Read it holding the queue: the header is the interface, the incomplete type is the hiding <em>mechanism</em>, the transparent-struct alternative is the leakage. Then diff <code>queue.h</code> against the <code>struct</code> in <code>queue.c</code> and, for three hidden fields, name what would break in a caller if that field were exposed and later changed.</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Bring me a header that exposes a struct body and we'll decide together whether it's a boundary that earns opacity or a helper where hiding is ceremony — then, if it earns it, convert it live (forward declaration, moved body, constructor, accessors) and weigh what the opacity cost. Pricing that tradeoff <em>is</em> the skill.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 5 (information hiding is the primary technique for deep modules; leakage is its failure).</li>
+      <li id="s2">Specimen (verified): <code>./reference/FreeRTOS-Kernel/include/queue.h</code> (forward decl + <code>QueueHandle_t</code>, lines 50–51) vs <code>queue.c</code> (<code>struct QueueDefinition</code> body, lines 103–136).</li>
+      <li id="s3">Allocation tradeoff: <code>xQueueCreate</code> vs <code>xQueueCreateStatic</code> in <code>queue.h</code> — the static variant exists because the type is opaque.</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0011-why-types-are-the-review-surface.html">← Lesson 11</a>
+    <a href="0013-make-illegal-states-unrepresentable.html">Lesson 13 — Illegal States →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'Why can a caller pass a <code>QueueHandle_t</code> around but not write <code>handle->uxLength</code>?',
+      options: [
+        'A pointer has known size; member access needs the layout',
+        'The field is marked private in the header file',
+        'A naming convention tells callers not to touch it'
+      ],
+      answer: 0,
+      why: 'A pointer to an incomplete type has known size/representation, so it can be formed and passed; member access requires the pointee\u2019s layout, which the header withholds. C has no private keyword \u2014 the incompleteness does the work.'
+    },
+    {
+      q: 'What is the second-order benefit of the struct being opaque?',
+      options: [
+        'Queue operations execute measurably faster at runtime',
+        'Its layout is not part of the ABI, so binaries stay compatible',
+        'The compiler can inline every field access across files'
+      ],
+      answer: 1,
+      why: 'Callers encode only a pointer, not field offsets, so the kernel can change the struct in a point release without forcing recompiles or corrupting existing binaries. (Opacity actually blocks inlining \u2014 that\u2019s a cost, not a benefit.)'
+    },
+    {
+      q: 'When does the steelman correctly say an opaque handle is the <em>wrong</em> choice?',
+      options: [
+        'At a published boundary with many external callers',
+        'For a two-caller internal helper in one file',
+        'Whenever the struct contains a union member'
+      ],
+      answer: 1,
+      why: 'Opacity earns its indirection and ceremony in proportion to callers and ABI stability promised. For a tiny internal helper there\u2019s no information worth hiding \u2014 the wrapper is ceremony, and a plain struct is the deeper choice.'
+    },
+    {
+      q: 'Why must <code>xQueueCreateStatic</code> exist alongside <code>xQueueCreate</code>?',
+      options: [
+        'To let callers choose a faster creation routine',
+        'Because opacity means callers can\u2019t size the struct themselves',
+        'Because static queues skip all the precondition asserts'
+      ],
+      answer: 1,
+      why: 'An opaque type has unknown sizeof at the call site, so the caller cannot allocate one on its own stack. The static variant lets the caller supply a buffer \u2014 an API obligation created directly by the hiding decision.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

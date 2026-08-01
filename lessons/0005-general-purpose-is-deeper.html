@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 5 — General-Purpose Is Deeper</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 05 <span class="sep">/</span> Module A <span class="sep">/</span> ~12 min</p>
+  <h1>One list to rule them all</h1>
+  <p class="lede">Faced with "the scheduler needs a list of ready tasks," the tactical instinct is to build a <code>ReadyTaskList</code>. The kernel built something stranger and far more powerful: a list that has never heard of a task. That choice is why five functions run the whole scheduler.</p>
+
+  <p class="mission"><b>Why this lesson:</b> An LLM, handed one caller, writes code specialised to that one caller — a <code>ReadyTaskList</code> with <code>addTask</code>/<code>removeTask</code>. It looks tidy and it is a trap: shallow, un-reusable, and it drags the caller's meaning into the module. The counter-skill is judging when a <em>slightly more general</em> interface would be simpler <em>and</em> deeper. Today the kernel shows you the payoff at full scale.</p>
+
+  <h2>The idea: "somewhat general-purpose" is usually deeper</h2>
+  <p>Ousterhout's Ch. 6 rule: make a module's interface <strong>somewhat general-purpose</strong> — general enough to serve several needs, not so general it serves none.<sup class="cite"><a href="#s1">1</a></sup> The counter-intuitive part is that this usually makes the module <em>simpler</em>, not more complex: a general interface has fewer methods (they each do more), and it forces the specialised, changeable knowledge <em>out</em> of the module and up to the caller — which is exactly the information-hiding you practised in <a href="0004-information-hiding-and-leakage.html">Lesson 4</a>, run in reverse.</p>
+  <div class="compare">
+    <div class="col-good">
+      <h4><span class="chip deep">general</span> deeper</h4>
+      <p>The module knows a mechanism (order things by a number). It does <em>not</em> know what the number means. One implementation, reused everywhere the mechanism fits. The meaning lives at the call site, where it belongs.</p>
+    </div>
+    <div class="col-bad">
+      <h4><span class="chip shallow">special</span> shallower</h4>
+      <p>The module is built for today's one caller — names, types and rules all encode that caller's semantics. It can't be reused, and it has <em>absorbed</em> knowledge (what "ready" means) that now can't change without touching it.</p>
+    </div>
+  </div>
+
+  <h2>Specimen: the list that doesn't know what it holds</h2>
+  <p>Open <code>./reference/FreeRTOS-Kernel/list.c</code>. The <em>entire</em> public engine is five functions:</p>
+  <pre><code><span class="cmt">/* list.c — the whole API. Nothing here mentions "task". */</span>
+<span class="kw">void</span>        vListInitialise( List_t * pxList );
+<span class="kw">void</span>        vListInitialiseItem( ListItem_t * pxItem );
+<span class="kw">void</span>        vListInsertEnd( List_t * pxList, ListItem_t * pxNew );  <span class="cmt">/* O(1) at index    */</span>
+<span class="kw">void</span>        vListInsert( List_t * pxList, ListItem_t * pxNew );     <span class="cmt">/* sorted by value  */</span>
+UBaseType_t uxListRemove( ListItem_t * pxItemToRemove );</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/list.c — lines 49, 89, 105, 139, 217 (verified)</p>
+  <p>What makes it general is <em>two fields</em> on the list item, and a discipline of not looking too hard at either:</p>
+  <pre><code><span class="cmt">/* list.h — the two hinges of generality */</span>
+<span class="kw">struct</span> xLIST_ITEM {
+    TickType_t xItemValue;   <span class="cmt">/* the sort key. "In most cases used to sort in
+                                ascending order." The list never asks what it MEANS. */</span>
+    ...
+    <span class="kw">void</span> * pvOwner;            <span class="cmt">/* back-pointer to whatever owns this item.
+                                A void*. The list never dereferences it. */</span>
+};</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/list.h — lines 144–152</p>
+
+  <p>That's the whole trick. The list orders items by a <code>TickType_t</code> number and carries a <code>void *</code> back to the owner. It has no idea whether the number is a time, a priority, or a lottery ticket — and no idea that the owner is a task. Now watch <code>tasks.c</code> feed that <em>same field</em> two completely different meanings:</p>
+  <pre><code><span class="cmt">/* tasks.c — a delayed task: the sort key is a WAKE-UP TIME */</span>
+listSET_LIST_ITEM_VALUE( &amp;( pxCurrentTCB-&gt;xStateListItem ), xTimeToWake );   <span class="cmt">// line 8683</span>
+
+<span class="cmt">/* tasks.c — a task waiting on an event: the sort key is (inverted) PRIORITY */</span>
+listSET_LIST_ITEM_VALUE( &amp;( pxTCB-&gt;xEventListItem ),
+                         configMAX_PRIORITIES - pxTCB-&gt;uxPriority );          <span class="cmt">// line 2927</span></code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/tasks.c — lines 8683 (wake-time) &amp; 2927 (priority)</p>
+  <p>Same field, same insert function, opposite semantics — and the list module is untouched, because it was never told the meaning in the first place. On that one general engine the kernel builds, at last count: the <strong>ready lists</strong> (one per priority), <strong>two delayed lists</strong> (current + overflow), the <strong>pending-ready</strong>, <strong>suspended</strong>, and <strong>waiting-termination</strong> lists — plus, from Lesson 4, every queue's <strong>tasks-waiting-to-send/receive</strong>. One implementation; a dozen jobs.</p>
+
+  <div class="callout key">
+    <span class="label">Verdict</span>
+    Generality made this module <em>smaller</em> (five functions) <strong>and</strong> deeper (it powers the entire scheduler) <strong>and</strong> reusable (a dozen call sites). The specialised, volatile knowledge — "this number is a wake time," "the owner is a TCB" — was pushed up to the callers via <code>xItemValue</code> and a <code>void * pvOwner</code>. That is Ch. 6 and Ch. 5 working as one move: <em>generalise the mechanism, hide the meaning.</em>
+  </div>
+
+  <p><strong>What this does <em>not</em> claim.</strong> The rule is "<em>somewhat</em> general-purpose" — the adjective is load-bearing. It does <em>not</em> say make everything generic, configurable, or pluggable. The list commits hard to "ordered by a <code>TickType_t</code>, doubly-linked, intrusive"; it is general over <em>meaning</em> and specific about <em>mechanism</em>. Push past that line — a comparator-pluggable, allocator-parameterised container framework — and you buy flexibility no caller uses and a module no one can read. The claim is that the sweet spot usually sits <em>slightly</em> more general than today's one caller, not at maximum generality.</p>
+
+  <details class="deep"><summary>Deep dive — the price of the <code>void *</code>: generality trades type-safety for reuse</summary>
+  <div class="body">
+    <p>The hinge that makes the list general — <code>void * pvOwner</code> — is also a deliberate hole in the type system, and seeing the tradeoff is the point. Because the owner is a <code>void *</code>, the list can carry a TCB, a queue, a timer — anything — which is exactly the reuse we're praising. But the compiler now cannot check that what you put in is what you take out: <code>listGET_LIST_ITEM_OWNER</code> hands back a <code>void *</code> the caller must cast to the <em>right</em> type by hand, and a wrong cast compiles cleanly and corrupts at runtime. So generality here is bought with a <em>connascence of type</em> (lesson <a href="0006-coupling-and-connascence.html">A6</a>) that the compiler no longer polices — the caller and the list silently agree on the real owner type. FreeRTOS judges the trade worth it because the alternative (a dozen type-safe special-purpose lists) is worse on every other axis. That's the honest shape of the decision: the <code>void *</code> is not sloppiness, it's the <em>currency</em> generality is paid in — and lesson <a href="0013-make-illegal-states-unrepresentable.html">C13</a> is about knowing exactly where C makes you pay it.</p>
+  </div></details>
+
+  <h2>The strongest case against generalising (steelman)</h2>
+  <p>"Build the general thing" has a powerful, correct-sounding opposition. State it at full strength, then synthesise.</p>
+  <div class="callout counter">
+    <span class="label">The case against</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>YAGNI.</strong> You have one caller. Build for it. Generalising for imagined future callers is speculative generality — the textbook waste — and the abstraction you guess now is usually the wrong one.</li>
+      <li><strong>General is less obvious.</strong> A <code>ReadyList.addTask()</code> reads itself; <code>vListInsert(&amp;list, &amp;item)</code> where the item's <code>xItemValue</code> secretly means priority is a puzzle. The specialised name carries intent the generic one hides.</li>
+      <li><strong>Generality costs safety and speed.</strong> The <code>void *</code> owner and untyped sort key throw away compiler checks and can add indirection — a special-purpose structure keeps its types and can be tuned.</li>
+    </ol>
+  </div>
+  <p><strong>The synthesis.</strong> The steelman is right about <em>speculative</em> generality and the scoped claim already forbids it. The tell is in Ousterhout's own framing: generalise when it makes the module <em>simpler right now</em>, not when it adds machinery for a hypothetical. The list qualifies because "order things by a number" is genuinely <em>simpler</em> than "track ready tasks by priority" — fewer concepts, not more — so it's not a bet on the future, it's a cleaner present (this is the exact opposite of lesson <a href="0009-isolate-what-changes.html">B9</a>'s over-engineering trap, and you must be able to tell them apart). Point (2) is a real cost the kernel pays back with <em>convention</em> — the <code>xStateListItem</code>/<code>xEventListItem</code> names at the call site restore the intent the generic core dropped. Point (3) is true and honest (see the fold above): generality is paid in type-safety. So the position is not "always generalise" — it's "prefer the <em>slightly</em> more general interface <em>when it is also simpler</em>; refuse it when it's only a guess about tomorrow."</p>
+
+  <div class="callout key">
+    <span class="label">Munger inversion — generality dies at both ends</span>
+    Invert "somewhat general-purpose" and you get its two ways to die. Too <em>special</em>: you bake one caller's meaning into the module, and the day a second caller appears you can't reuse it — specialisation is a one-way door. Too <em>general</em>: you build the configurable framework for callers who never arrive, and every reader pays for flexibility no one uses — that's just <a href="0009-isolate-what-changes.html">B9</a>'s leakage with better manners. The list lives exactly between: general over what varies (the meaning of the number), specific about what doesn't (it's a sorted doubly-linked list). Ask of any interface: <em>which of these two deaths is it closer to?</em>
+  </div>
+
+  <h2>What over-specialisation would have cost</h2>
+  <p>Take the LLM-tidy path: a <code>ReadyList</code> keyed by priority, a separate <code>DelayedList</code> keyed by time, a <code>SuspendedList</code>, and so on. Each "works." Collectively they are the disaster Module A keeps circling:</p>
+  <ul>
+    <li><strong>Five functions become thirty</strong> — every list re-implements insert/remove with its own names. Interface size explodes; every one is <span class="chip shallow">shallow</span>.</li>
+    <li><strong>The doubly-linked-list decision leaks into a dozen modules</strong> (<a href="../reference/glossary.html">information leakage</a>) — fix a pointer bug once, fix it twelve times.</li>
+    <li><strong>The meaning gets baked in</strong>: a <code>ReadyList</code> that <em>knows</em> it sorts by priority can't be reused the day you need to sort by wake time. Specialisation is a one-way door.</li>
+  </ul>
+  <p>But note the discipline word: <em>somewhat</em>. The list isn't infinitely general — it commits to "ordered by a <code>TickType_t</code>, doubly-linked, intrusive." That commitment is what keeps it five functions instead of a configurable container framework. General enough to be reused; specific enough to stay tiny. Finding that line <em>is</em> the judgment.</p>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    An interface whose names and types encode the semantics of its <em>single current caller</em> — <code>addReadyTask</code>, a struct member called <code>priority</code> in a container that only ever sorts. The words: <em>"This is specialised to today's one caller. What's the underlying mechanism? Name the interface after that, push the meaning to the call site, and it'll get simpler and reusable at once."</em>
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 6 ("General-Purpose Modules are Deeper").</strong> Then trace one path in the specimen: search <code>tasks.c</code> for <code>listSET_LIST_ITEM_VALUE</code> and note every different <em>meaning</em> the same field is given. That list of meanings is the reuse Ch. 6 is promising, made concrete.</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Bring me a class or module you (or a model) wrote for one caller, and we'll ask the Ch. 6 question together: what's the mechanism under the specialisation, and would naming <em>that</em> make it smaller and reusable? Or push back — argue a case where staying special-purpose is the right call. That argument is the skill.</p>
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 6 (general-purpose modules are deeper).</li>
+      <li id="s2">The general engine &amp; its two hinges: <code>./reference/FreeRTOS-Kernel/list.c</code> (5-function API) and <code>include/list.h</code> lines 144–152 (<code>xItemValue</code>, <code>pvOwner</code>).</li>
+      <li id="s3">Same field, two meanings: <code>./reference/FreeRTOS-Kernel/tasks.c</code> line 8683 (wake-time) vs line 2927 (inverted priority).</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0004-information-hiding-and-leakage.html">← Lesson 4</a>
+    <a href="0006-coupling-and-connascence.html">Lesson 6 — Coupling &amp; Connascence →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'How can one list module serve both delayed tasks and event-waiters unchanged?',
+      options: [
+        'It stores the sort key without knowing what it means',
+        'It branches internally on whether the owner is delayed',
+        'It keeps two code paths, one per kind of list it holds'
+      ],
+      answer: 0,
+      why: 'The list orders by <code>xItemValue</code> and never asks whether that number is a wake time or a priority. The meaning lives at the call site, so the module needs no branch and no second path.'
+    },
+    {
+      q: 'Per Ch. 6, making the list general-purpose most directly made its interface…',
+      options: [
+        'larger, since it must cover many callers at once',
+        'smaller, since each function does more for everyone',
+        'unchanged, since generality is a runtime property'
+      ],
+      answer: 1,
+      why: 'Generality collapsed a dozen special-purpose APIs into five functions that each serve every caller. Fewer, more powerful methods is the shape of a deep module.'
+    },
+    {
+      q: 'A container class with a member named <code>priority</code> that it only ever sorts by. Best review call?',
+      options: [
+        'Fine — the name documents exactly what it sorts on',
+        'Leaked meaning — name the mechanism, not the caller',
+        'Make it fully generic with pluggable comparator objects'
+      ],
+      answer: 1,
+      why: 'The caller\u2019s semantics (priority) leaked into a generic mechanism (ordering), blocking reuse. Name it for the mechanism and push meaning to the call site. Going <em>fully</em> generic overshoots "somewhat general-purpose."'
+    },
+    {
+      q: 'A teammate invokes YAGNI to reject a more general interface. When is that objection wrong?',
+      options: [
+        'Whenever generic code is theoretically more reusable than special',
+        'When the general interface is also simpler now, not a future bet',
+        'Never — building for the single current caller is always the choice'
+      ],
+      answer: 1,
+      why: 'YAGNI rightly kills generality that only pays off in a hypothetical future. It does not apply when the general form is simpler in the present — \u201corder by a number\u201d has fewer concepts than \u201ctrack ready tasks by priority.\u201d Simpler-now beats special; guess-for-later does not.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

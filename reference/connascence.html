@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connascence Cheat-Sheet — Strategic Programmer</title>
+<link rel="stylesheet" href="../assets/course.css">
+<style>
+  table.cx { width:100%; border-collapse:collapse; margin:1.2rem 0; font-size:0.92rem; }
+  table.cx th, table.cx td { text-align:left; padding:0.5rem 0.7rem; border-bottom:1px solid var(--rule); vertical-align:top; }
+  table.cx thead th { font-family:var(--mono); font-size:0.7rem; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); border-bottom:2px solid var(--rule); }
+  table.cx td.k { font-weight:700; white-space:nowrap; }
+  table.cx tr .rank { font-family:var(--mono); color:var(--ink-soft); }
+  .band { font-family:var(--mono); font-size:0.72rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--accent); margin:2rem 0 0.3rem; }
+  .rulebox { border:1px solid var(--rule); border-radius:8px; padding:0.9rem 1.1rem; margin:1.2rem 0; background:var(--paper-2, transparent); }
+  .rulebox ol { margin:0.4rem 0 0; padding-left:1.2rem; }
+  .rulebox li { margin:0.25rem 0; }
+  code.sp { white-space:nowrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Reference <span class="sep">/</span> Connascence Cheat-Sheet</p>
+  <h1>Connascence — coupling you can name</h1>
+  <p class="lede">A precise vocabulary for coupling, so a review comment can say <em>which</em> coupling and <em>how to weaken it</em> instead of "this feels coupled." Two components are <strong>connascent</strong> if changing one forces a change in the other to keep the system correct.<sup class="cite"><a href="#s1">1</a></sup> Ranked below by <b>strength</b> (how hard to refactor). The strategic move is almost always: <em>convert a stronger form into a weaker one.</em></p>
+
+  <p class="band">Static connascence — visible in the source (weakest → strongest)</p>
+  <table class="cx">
+    <thead><tr><th>Form</th><th>Two parties must agree on…</th><th>Weaken it by…</th><th>FreeRTOS specimen</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Name</td><td>the <em>name</em> of a thing. Rename the entity, update every reference. Unavoidable; the weakest.</td><td>— (this is the floor; aim to land here)</td><td>every call to <code class="sp">xQueueSend</code></td></tr>
+      <tr><td class="k">Type</td><td>the <em>type</em> of a thing (param, return, field).</td><td>strong static typing makes it compiler-checked — cheap</td><td><code class="sp">QueueHandle_t</code> in every signature</td></tr>
+      <tr><td class="k">Meaning</td><td>the <em>meaning</em> of a value — a magic number/sentinel both sides interpret.</td><td>name the constant → becomes connascence of <b>Name</b></td><td>raw <code>0</code>/<code>1</code> upgraded to <code class="sp">pdPASS</code>/<code class="sp">queueSEND_TO_BACK</code></td></tr>
+      <tr><td class="k">Position</td><td>the <em>order</em> of values — positional args, tuple/array slots.</td><td>pass a named struct → becomes connascence of <b>Name</b></td><td>the 4 ordered args of <code class="sp">xQueueGenericSend</code></td></tr>
+      <tr><td class="k">Algorithm</td><td>a shared <em>algorithm/protocol</em> — both sides compute or sequence the same way.</td><td>share one implementation; encapsulate the protocol</td><td>the <code class="sp">pxHigherPriorityTaskWoken</code> ISR yield protocol; a checksum both ends run</td></tr>
+    </tbody>
+  </table>
+
+  <p class="band">Dynamic connascence — only visible at run time (stronger; hunt these first)</p>
+  <table class="cx">
+    <thead><tr><th>Form</th><th>Two parties must agree on…</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Execution (order)</td><td>the <em>order</em> in which things run — call <code>init()</code> before <code>use()</code>.</td></tr>
+      <tr><td class="k">Timing</td><td>the <em>timing</em> of execution — a race, a required delay, a deadline.</td></tr>
+      <tr><td class="k">Value</td><td>several <em>values</em> must change together to stay consistent (an invariant across variables).</td></tr>
+      <tr><td class="k">Identity</td><td>multiple entities must refer to the <em>same instance</em> (same object, not just equal).</td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:0.9rem;color:var(--ink-soft)">Dynamic forms are generally stronger than static ones: the compiler can't see them, so they fail at run time and resist refactoring tools. When you spot one, that's your first refactor target.</p>
+
+  <p class="band">The three properties (how you reason about any instance)</p>
+  <table class="cx">
+    <tbody>
+      <tr><td class="k">Strength</td><td>How hard is it to refactor away? Weaker (Name) is easier to change than stronger (Algorithm, or any dynamic form). <em>Prefer weaker.</em></td></tr>
+      <tr><td class="k">Locality</td><td>How close are the two parties? Strong connascence <em>inside</em> one small module is fine; the <em>same</em> strength across a module boundary is a problem. <em>Distance raises the cost of strength.</em></td></tr>
+      <tr><td class="k">Degree</td><td>How many entities are entangled? A protocol shared by 2 sites is cheaper to change than one shared by 40. <em>Prefer lower degree.</em></td></tr>
+    </tbody>
+  </table>
+
+  <div class="rulebox">
+    <b>Weirich's rules of thumb</b> (how to <em>use</em> all of the above):<sup class="cite"><a href="#s1">1</a></sup>
+    <ol>
+      <li><b>Minimise overall connascence</b> by splitting the system into well-encapsulated elements.</li>
+      <li><b>Minimise connascence that crosses boundaries</b> (long distance × any strength = pain).</li>
+      <li><b>Maximise connascence within a boundary</b> — it's cheap when local, so keep entangled things together.</li>
+      <li>When stuck with coupling, <b>convert a stronger form into a weaker one</b> (Position/Meaning → Name is the everyday win).</li>
+    </ol>
+  </div>
+
+  <div class="callout key">
+    <span class="label">The review one-liner this buys you</span>
+    Instead of "this is coupled," say: <em>"That's connascence of <b>position</b> across a module boundary — pass a named struct to make it connascence of <b>name</b>."</em> Naming the coupling and prescribing the downgrade is the whole skill.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Meilir Page-Jones, <em>What Every Programmer Should Know About Object-Oriented Design</em> (1996) &amp; "Comparing Techniques by Means of Encapsulation and Connascence," CACM 35(9), 1992. Taxonomy &amp; Jim Weirich's rules as catalogued at <a href="https://connascence.io/">connascence.io</a> (About, and per-form pages).</li>
+      <li id="s2">Specimens: <code>./reference/FreeRTOS-Kernel/include/queue.h</code> (<code>xQueueGenericSend</code> args, <code>pxHigherPriorityTaskWoken</code>) and <code>include/projdefs.h</code> (<code>pdPASS</code>/<code>pdFAIL</code>).</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="../lessons/0006-coupling-and-connascence.html">← Lesson 6</a>
+    <a href="glossary.html">Glossary ↗</a>
+  </div>
+</div>
+</body>
+</html>

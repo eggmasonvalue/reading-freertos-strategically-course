@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 16 — API Design as a Craft</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 16 <span class="sep">/</span> Module C finale <span class="sep">/</span> enrich <span class="sep">/</span> ~14 min</p>
+  <h1>The details that make an API humane</h1>
+  <p class="lede">Types set the walls; craft decides whether living inside them is pleasant or a trap. This closes Module C with the small, repeatable API judgments — dual interfaces, argument order, the boolean trap — that separate an interface people use correctly by default from one they fight. And it prices the tension between "hard to misuse" and "small."</p>
+
+  <p class="mission"><b>Why this lesson:</b> Bloch's thesis<sup class="cite"><a href="#s1">1</a></sup> — "APIs should be easy to use right and hard to use wrong." That property is exactly what stops LLM-generated call sites from being subtly wrong: when the correct call is the <em>obvious</em> one, the model (and the junior, and you-at-2am) falls into the pit of success. But craft maxims collide with each other, and knowing which one wins <em>when</em> is the real skill this lesson trains.</p>
+
+  <h2>Specimen 1 — the dual interface (context baked into the type)</h2>
+  <p>The kernel never lets you call a blocking queue function from an interrupt. It ships a <em>separate</em>, ISR-safe twin of each:</p>
+  <pre><code><span class="cmt">/* task context — may block, takes a timeout */</span>
+BaseType_t xQueueSend( QueueHandle_t xQueue, <span class="kw">const void</span> * pvItemToQueue,
+                       TickType_t xTicksToWait );
+
+<span class="cmt">/* interrupt context — never blocks; reports if it woke a task */</span>
+BaseType_t xQueueSendFromISR( QueueHandle_t xQueue, <span class="kw">const void</span> * pvItemToQueue,
+                              BaseType_t * pxHigherPriorityTaskWoken );</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/queue.h — <code>xQueueSend</code> · <code>xQueueSendFromISR</code> (macro, line 1286, verified)</p>
+  <div class="callout key">
+    <span class="label">Why two functions beats one flag</span>
+    They could have written one function with an <code>isFromISR</code> boolean. Instead the calling context is baked into the <em>function's identity</em>. Three payoffs: (1) the wrong call is <em>hard to write</em> — you can't pass a timeout from an ISR because the parameter isn't there; (2) the <code>FromISR</code> suffix makes an audit trivial — grep it and every ISR-reachable path is named; (3) it's self-documenting at the call site. Context that matters became part of the <em>name and signature</em> rather than a runtime argument — the craft face of C11's "the signature is the spec."
+  </div>
+  <details class="deep"><summary>Deep dive — <em>why</em> blocking in an ISR is catastrophic (the reason the split exists)</summary>
+  <div class="body">
+    <p>"Blocking" in FreeRTOS means: remove the current <em>task</em> from the ready list and switch to another until some event. But an interrupt doesn't run in a task — it preempted whatever was running and has no TCB of its own to suspend. Ask an ISR to "block" and there is nothing coherent to block; the scheduler's invariants break, and depending on the port you get a corrupted stack, a missed context switch, or a hard fault. This isn't a style preference — a blocking call from an ISR is <em>undefined behavior at the scheduler level</em>. So the dual interface is enforcing a genuine, catastrophic, and <em>silent</em> constraint: the danger is invisible in casual reading and its symptom is far from its cause. That severity is precisely what justifies doubling the function count (see the steelman) — the split converts a catastrophic-but-silent runtime bug into a can't-write-it-wrong compile-time shape. The <code>pxHigherPriorityTaskWoken</code> out-param is the other half: the ISR can't yield mid-flight, so it <em>records</em> whether a yield is owed and the caller performs it on exit via <code>portYIELD_FROM_ISR()</code> — a deferred context switch, because even yielding must wait for a safe point.</p>
+  </div></details>
+
+  <h2>Specimen 2 — the boolean trap, dodged</h2>
+  <p>Note what <code>xQueueSendFromISR</code>'s third parameter is <em>not</em>: a bare <code>bool</code>. It's <code>BaseType_t * pxHigherPriorityTaskWoken</code> — a named out-parameter. A lesser design returns a bare <code>bool</code> and leaves the caller to guess what <code>true</code> meant; here the <em>named pointer</em> says at the call site exactly what's being reported:</p>
+  <pre><code>xHigherPriorityTaskWoken = pdFALSE;
+xQueueSendFromISR( q, &amp;data, &amp;xHigherPriorityTaskWoken );
+<span class="cmt">/* ... the name carries the meaning; no mystery boolean */</span>
+portYIELD_FROM_ISR( xHigherPriorityTaskWoken );</code></pre>
+  <div class="callout watch">
+    <span class="label">The boolean trap (Bloch's classic)</span>
+    A bare boolean parameter — <code>doThing(true)</code> — is opaque at the call site: the reader can't tell what <code>true</code> selects without opening the docs. Worse, two booleans and you're one swap away from a silent bug the compiler can't catch (both are <code>bool</code> — C13's "same type" hole, in miniature). Fixes: a named enum, two well-named functions (as <code>FromISR</code> does), or a named out-parameter. When you see <code>foo(x, true, false)</code> in an LLM diff, that's the smell — <em>"these booleans are unreadable at the call site and swap-prone; make them an enum or split the function."</em>
+  </div>
+
+  <h2>The craft checklist — Bloch's maxims as review questions</h2>
+  <ul>
+    <li><strong>Easy to use right, hard to use wrong.</strong> Is the correct call the obvious one? Can a plausible misuse even be written?</li>
+    <li><strong>Least astonishment.</strong> Does it do what its name promises and nothing surprising?</li>
+    <li><strong>No boolean traps.</strong> Any bare <code>bool</code>/magic flag that's opaque at the call site? Enum or split.</li>
+    <li><strong>Argument order &amp; consistency.</strong> Same idea in the same slot everywhere? (Kernel: handle first, data next, control/timeout last — across every queue function.)</li>
+    <li><strong>Don't make the caller do what the API could.</strong> Push work down (lesson C15 / APoSD ch8).</li>
+    <li><strong>When in doubt, leave it out.</strong> You can add to an API later; you can't remove. Small surface = deep module (lesson <a href="0002-deep-vs-shallow-modules.html">A2</a>).</li>
+  </ul>
+  <p>That's your <strong>API review checklist</strong>, captured as a durable reference: <a href="../reference/api-review-checklist.html">reference/api-review-checklist.html</a>. Run it on the next interface you review and watch "this feels off" become a specific, quotable objection.</p>
+
+  <div class="callout counter">
+    <span class="label">The strongest case against this brand of "craft"</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>The dual interface fights "leave it out."</strong> Two functions per operation <em>doubles</em> the public surface — every reader learns <code>xQueueSend</code> <em>and</em> <code>xQueueSendFromISR</code>, <code>...Receive</code> and <code>...ReceiveFromISR</code>, and on. By A2's own logic, a bigger interface is <em>shallower</em>. So Bloch ("hard to misuse") and Ousterhout ("small surface") are in direct conflict here.</li>
+      <li><strong>Out-params are their own trap.</strong> <code>pxHigherPriorityTaskWoken</code> must be initialized, passed by address, and acted on later — easy to forget any step, and forgetting silently drops a context switch. "No boolean" traded one footgun for another.</li>
+      <li><strong>Consistency ossifies early mistakes.</strong> Once the <code>...FromISR</code> + out-param convention is set across dozens of functions, it's unchangeable even if a cleaner design appears. Craft-as-consistency can lock in a mediocre local optimum forever (C11 blade 4: durability cuts both ways).</li>
+    </ol>
+  </div>
+  <p><strong>Synthesis.</strong> The conflicts are real, and resolving them is the judgment — the maxims are <em>weights</em>, not laws, and the tie-breaker is <strong>cost of misuse × frequency of misuse</strong>. On (1): the dual interface wins over "leave it out" precisely because the misuse it prevents (blocking in an ISR) is catastrophic <em>and</em> silent <em>and</em> the two contexts are genuinely different operations — so the extra surface buys a guarantee proportional to the danger. Where the two "contexts" were trivially similar and misuse was cheap, one function with a parameter would rightly win; you don't split <code>abs()</code> into <code>absFromISR()</code>. On (2): the out-param is justified by the same math — the ISR literally cannot yield inline (deep-dive), so <em>some</em> deferred-signal mechanism is unavoidable; the named pointer is the least-bad option, not a free win, and honest craft admits that. On (3): the durability that ossifies a convention is the same durability that makes a <em>good</em> convention compound — which is why C11 argued the type/API decision deserves the most review attention <em>before</em> it ships, because it's the one you can't cheaply take back. So craft isn't a checklist you pass; it's a set of forces you balance, weighted by how expensive and how likely each misuse is.</p>
+
+  <div class="callout key">
+    <span class="label">Module C, in one line</span>
+    Types are the review surface (<a href="0011-why-types-are-the-review-surface.html">C11</a>) → hide behind opaque handles (<a href="0012-opaque-handles-and-incomplete-types.html">C12</a>) → make illegal states unrepresentable where misuse is silent and costly (<a href="0013-make-illegal-states-unrepresentable.html">C13</a>) → assert the contracts types can't hold (<a href="0014-design-by-contract.html">C14</a>) → design the errors away without losing observability (<a href="0015-define-errors-out-of-existence.html">C15</a>) → finish with craft, weighing the maxims by cost×frequency of misuse (C16). Six moves, one skill: <em>read and shape an interface so the compiler, the caller, and the LLM all fall into the pit of success.</em>
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <p>From memory — the effort is the point.</p>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Joshua Bloch, "How to Design a Good API and Why It Matters" (talk + paper).</strong> Then run the checklist on <code>xQueueSendFromISR</code> and on one API from your own codebase; for each, name the one maxim you'd <em>violate on purpose</em> and the cost×frequency argument that justifies it. (Add Bloch to <a href="../index.html#references">RESOURCES.md</a>.)</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Drop any function signature — yours or an LLM's — and we'll run the six-point checklist, find where the maxims <em>conflict</em>, and resolve it by cost×frequency of misuse. This is also the doorway to Module D (naming) and Module E (the full review rubric) — say the word.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Joshua Bloch, "How to Design a Good API and Why It Matters" — easy to use right, hard to use wrong; boolean traps; consistency; "when in doubt, leave it out."</li>
+      <li id="s2">Specimen (verified): <code>queue.h</code> — <code>xQueueSend</code> vs <code>xQueueSendFromISR</code> (line 1286); the <code>pxHigherPriorityTaskWoken</code> out-parameter + <code>portYIELD_FROM_ISR</code> deferred-yield convention.</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0015-define-errors-out-of-existence.html">← Lesson 15</a>
+    <a href="../reference/api-review-checklist.html">API Checklist ↗</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'Why ship <code>xQueueSendFromISR</code> as a separate function instead of a context flag?',
+      options: [
+        'It makes both versions run measurably faster',
+        'The wrong-context call becomes hard to even write',
+        'It lets the two share one line of implementation'
+      ],
+      answer: 1,
+      why: 'Baking context into the identity means you can\u2019t pass a timeout from an ISR and every ISR path is greppable \u2014 easy to use right, hard to use wrong. Speed and code-sharing are not the motivation.'
+    },
+    {
+      q: 'What is the real reason a blocking call from an ISR is forbidden?',
+      options: [
+        'Interrupts run too fast to afford any blocking',
+        'An ISR has no task context to suspend or yield',
+        'The queue is locked while an interrupt is active'
+      ],
+      answer: 1,
+      why: 'Blocking suspends the current task, but an ISR isn\u2019t a task \u2014 there is nothing coherent to block, so it\u2019s scheduler-level undefined behavior. The dual interface turns that silent catastrophe into a shape you can\u2019t write wrong.'
+    },
+    {
+      q: 'The dual interface doubles the API surface. Why can that beat "leave it out"?',
+      options: [
+        'Because more functions always read more clearly',
+        'The prevented misuse is catastrophic, silent, and likely',
+        'Because A2 does not apply to kernel-level code'
+      ],
+      answer: 1,
+      why: 'Maxims are weights, tie-broken by cost \u00d7 frequency of misuse. Blocking-in-an-ISR is catastrophic and silent, and the two contexts are genuinely different operations \u2014 so the extra surface buys a guarantee proportional to the danger.'
+    },
+    {
+      q: 'Per the synthesis, the craft maxims are best understood as what?',
+      options: [
+        'Absolute rules every good API must satisfy',
+        'Weights balanced by how costly and likely misuse is',
+        'A fixed checklist you either pass or fail'
+      ],
+      answer: 1,
+      why: 'They conflict (hard-to-misuse vs small surface; no-boolean vs out-param cost), so you balance them by cost \u00d7 frequency of misuse rather than applying them as laws or a pass/fail gate.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

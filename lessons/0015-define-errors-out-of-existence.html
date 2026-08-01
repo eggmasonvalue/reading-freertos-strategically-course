@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 15 — Define Errors Out of Existence</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 15 <span class="sep">/</span> Module C <span class="sep">/</span> ~14 min</p>
+  <h1>The error that isn't</h1>
+  <p class="lede">The best way to handle an error is to design so it cannot occur. Every error a caller must check is a branch to write, test, and get wrong. Ousterhout's move is to reduce not the handling but the <em>number of errors that exist</em> — and the honest catch is that "eliminated" often means "absorbed somewhere you should be able to point to."</p>
+
+  <p class="mission"><b>Why this lesson:</b> LLMs generate error-handling by the yard — <code>if (err) {…}</code> after every call, much of it for failures that can't happen. That noise is complexity, and complexity is where slop hides. The strategic counter is to recognize (and design) APIs whose signature says "<em>this cannot fail</em>," so the branch doesn't exist to get wrong. But you must also see <em>where the difficulty went</em> when an error "disappears," or you'll mistake masking for magic.</p>
+
+  <h2>The principle (APoSD ch10), ranked by power</h2>
+  <p>Errors are a leading source of complexity because each one multiplies the paths a reader must hold in mind. Ousterhout's four tactics<sup class="cite"><a href="#s1">1</a></sup>:</p>
+  <ol>
+    <li><strong>Define the error out of existence</strong> — redefine the semantics so the "error" becomes a normal case (deleting something absent is a no-op success, not a failure).</li>
+    <li><strong>Mask it</strong> — handle it at a low level so higher levels never see it.</li>
+    <li><strong>Aggregate</strong> — handle many errors in one place instead of at every call.</li>
+    <li><strong>Just crash</strong> — for truly unrecoverable violations (this is what <a href="0014-design-by-contract.html">C14</a>'s <code>configASSERT</code> does).</li>
+  </ol>
+  <p>Keep tactic 1 and tactic 2 distinct in your mind — the steelman below turns on the fact that they're easy to confuse, and that what looks like "defined out of existence" is frequently "masked, well."</p>
+
+  <h2>Specimen: read the return types as promises</h2>
+  <p>The kernel's signatures tell you, before you read a line of body, which operations <em>can</em> fail and which <em>can't</em> — and many were deliberately designed into the second group:</p>
+  <pre><code><span class="cmt">/* CAN fail — and the type forces you to notice (this is C11 again) */</span>
+BaseType_t xQueueReceive( QueueHandle_t xQueue, <span class="kw">void</span> * pvBuffer,
+                          TickType_t xTicksToWait );   <span class="cmt">/* pdTRUE / pdFALSE: may time out */</span>
+
+<span class="cmt">/* CANNOT fail — the void return IS the promise */</span>
+<span class="kw">void</span> vTaskDelay( <span class="kw">const</span> TickType_t xTicksToDelay );   <span class="cmt">/* delaying always "succeeds" */</span>
+<span class="kw">void</span> vTaskDelete( TaskHandle_t xTaskToDelete );      <span class="cmt">/* deleting is defined to just work */</span></code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/queue.h:913 · include/task.h:894, 840 (verified)</p>
+  <div class="callout key">
+    <span class="label">Read the leverage</span>
+    <code>xQueueReceive</code> returns <code>BaseType_t</code> because a timeout is a <em>real, expected</em> outcome the caller must branch on — that error genuinely exists, so the type surfaces it. But <code>vTaskDelay</code> returns <code>void</code>: the designers arranged the semantics so there is <em>nothing to fail</em>. The absence of a return value is not laziness — it's a <strong>promise</strong>, and it deletes a branch from every one of the thousands of call sites. Multiply that: the API's error surface shrank by design, and with it the state space every caller (and every test, and every LLM) must cover.
+  </div>
+  <details class="deep"><summary>Deep dive — where the difficulty actually went in <code>vTaskDelete</code></summary>
+  <div class="body">
+    <p>"Deleting always succeeds" sounds too clean, so follow the hard case: a task deleting <em>itself</em>. It cannot free its own stack — it is currently running <em>on</em> that stack; free it and the next instruction executes on reclaimed memory. A naive API would have to fail or forbid this. FreeRTOS instead <em>absorbs</em> the difficulty: <code>vTaskDelete</code> puts the doomed task on a <code>xTasksWaitingTermination</code> list and returns; the <strong>Idle task</strong> later runs <code>prvCheckTasksWaitingTermination</code> → <code>prvDeleteTCB</code> and frees the memory from a safe context (tasks.c lines 2269, 2330–2335, verified). So the error wasn't conjured out of reality — it was <em>masked</em> (tactic 2): relocated to a place that can handle it cleanly, so the caller's interface can honestly promise <code>void</code>. That is the real craft, and the honest reading: "defined out of existence" at the interface is very often "masked, well" underneath — and a strategic reviewer can <em>point to where</em>. If you can't point to where the difficulty went, it wasn't handled; it was ignored.</p>
+  </div></details>
+
+  <h2>The naming convention encodes the promise</h2>
+  <p>You've been decoding the Hungarian prefixes (lesson <a href="0017-choosing-names-and-decoding-conventions.html">D17</a>). Here they pay off as a contract readable at a glance: a <code>v...</code> function returns <code>void</code> — it tells you in its <em>name</em> "no result to check"; an <code>x...</code> function returns a <code>BaseType_t</code> you're expected to inspect. The kernel's own convention sorts its API into can-fail / can't-fail <em>before you even reach the return type</em>. Error design, made visible in the name — exactly the obviousness a reviewer should demand, and a small proof that D17's "convention as information" is real value, not just ceremony.</p>
+
+  <div class="callout counter">
+    <span class="label">The strongest case against "define errors out of existence"</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>It can hide bugs, not just errors.</strong> Redefining "delete an absent thing = success" also silences the case where its absence was itself a bug you'd have wanted to know about. A no-op success can convert a loud failure into a quiet wrong-behavior — strictly worse.</li>
+      <li><strong>"Just crash" is a luxury many domains don't have.</strong> Ousterhout's tactic 4 assumes crashing is acceptable. You cannot crash a brake controller or a pacemaker; "halt on the impossible" must become "enter a defined safe state," which is <em>more</em> error machinery, not less.</li>
+      <li><strong>Masking destroys observability.</strong> Push errors down and handle them silently, and the higher layers lose the signal — you can't diagnose, meter, or alert on a failure the API swallowed. Fewer branches can mean less insight into a misbehaving system.</li>
+    </ol>
+  </div>
+  <p><strong>Synthesis.</strong> Each objection is a boundary condition on the tactic, not a refutation — and together they define <em>which</em> tactic to reach for. Point (1) says: define out of existence only when the "error" is genuinely a normal case in your domain's semantics; if absence is sometimes a bug, keep it observable (assert it, per C14, or return it). Point (2) says: in hard-real-time/safety, replace "crash" with "transition to safe state" — the <em>principle</em> (don't limp on with broken invariants) survives; only the mechanism changes. Point (3) is the sharpest: masking is powerful but must not be <em>silent</em> — mask the caller's obligation to <em>handle</em> the error while preserving the system's ability to <em>observe</em> it (a counter, a trace hook — note FreeRTOS keeps <code>traceQUEUE_*</code> hooks exactly here). So the mature rule isn't "delete all errors"; it's: <em>an error should exist at exactly one layer — the one that can actually resolve it — and be observable from above even when it's handled below.</em> The goal is fewer <em>obligations</em> on the caller, not less <em>truth</em> in the system.</p>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    An API that returns an error code no caller can <em>do</em> anything useful with — the only honest response is to assert or ignore it. Say it: <em>"What can a caller actually do with this failure? If nothing meaningful, design it out — make it a no-op success, mask it at the layer that can resolve it, or crash/safe-state on the truly impossible — but keep it observable. Don't hand back a status nobody can act on."</em> And its inverse: <em>"This no-op-success is swallowing a case that's sometimes a real bug — keep it observable."</em>
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <p>From memory — the pull is the point.</p>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 10 ("Define Errors Out of Existence").</strong> Then split ten <code>task.h</code> functions into <code>void</code> (can't-fail) vs <code>BaseType_t</code> (can-fail); for one <code>void</code> one, trace where the difficulty was <em>absorbed</em> (as we did for <code>vTaskDelete</code>), and for one can-fail one, ask whether a redesign could have deleted the error honestly.</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Bring an API of yours heavy with error returns and we'll try to <em>delete</em> some — redefine semantics, mask at the resolving layer (while keeping a trace hook), or safe-state on the impossible — until only the errors that genuinely need a caller decision remain. Doing that subtraction <em>without losing observability</em> is the skill.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 10 (define errors out of existence; mask; aggregate; crash).</li>
+      <li id="s2">Specimen (verified): <code>queue.h:913</code> (<code>xQueueReceive</code>, can fail) vs <code>task.h:894,840</code> (<code>vTaskDelay</code>/<code>vTaskDelete</code>, <code>void</code>); self-delete absorbed via <code>xTasksWaitingTermination</code> + Idle task, <code>tasks.c:2269,2330–2335</code>.</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0014-design-by-contract.html">← Lesson 14</a>
+    <a href="0016-api-design-as-a-craft.html">Lesson 16 — API Design as a Craft →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'What does <code>vTaskDelay</code> returning <code>void</code> most precisely communicate?',
+      options: [
+        'The function runs faster without a return value',
+        'The operation is designed so nothing can fail',
+        'The result is returned through an out-parameter'
+      ],
+      answer: 1,
+      why: 'The semantics were arranged so delaying always succeeds \u2014 the void return is a promise that removes an error branch from every caller. It is a design choice, not an optimization or an out-parameter trick.'
+    },
+    {
+      q: 'How does <code>vTaskDelete</code> honestly promise <code>void</code> even when a task deletes itself?',
+      options: [
+        'It refuses self-deletion and returns silently',
+        'It defers the stack cleanup to the Idle task',
+        'It frees the running stack immediately in place'
+      ],
+      answer: 1,
+      why: 'A task can\u2019t free the stack it is running on, so the difficulty is masked: the task is queued on xTasksWaitingTermination and the Idle task frees it later. The error was absorbed at a layer that can resolve it, not eliminated.'
+    },
+    {
+      q: 'Per the steelman, when is "no-op success" the wrong way to define an error out?',
+      options: [
+        'When the operation is called very frequently',
+        'When the error condition is sometimes a real bug',
+        'When the function is part of a public header'
+      ],
+      answer: 1,
+      why: 'If absence (or the "error") is sometimes itself a defect, silently succeeding converts a loud failure into quiet wrong behavior. Define out only genuine normal cases; keep the rest observable via assert or return.'
+    },
+    {
+      q: 'What is the mature rule the synthesis lands on?',
+      options: [
+        'Delete every error return to minimize caller branches',
+        'One resolving layer handles it; stays observable above',
+        'Always crash rather than mask any failure condition'
+      ],
+      answer: 1,
+      why: 'An error should live at the one layer that can resolve it and remain observable from above even when handled below. The goal is fewer caller obligations, not less truth in the system \u2014 and crashing isn\u2019t always available.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 18 — Comments as a Design Tool</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 18 <span class="sep">/</span> Module D <span class="sep">/</span> ~14 min</p>
+  <h1>Comments that add information, not noise</h1>
+  <p class="lede">Most comments are worthless because they repeat the code. The valuable ones capture what the code <em>cannot</em> say — the abstraction, the contract, the reason. Ousterhout goes further: writing them <em>first</em> is a design tool that exposes shallow modules before you build them. But a large, serious camp says comments are a smell — so we'll take that seriously and find the exact line.</p>
+
+  <p class="mission"><b>Why this lesson:</b> In the AI era comments do double duty — they're the spec a reviewer reads and the intent an LLM is meant to honor. But models emit exactly the wrong kind (restating the line above). Knowing which comments carry information — and using them to <em>drive</em> design — is the skill. This pairs directly with <a href="0003-a-documented-decision.html">A3</a> (the comment that records a decision).</p>
+
+  <h2>The distinction that matters: interface vs implementation</h2>
+  <ul>
+    <li><strong>Interface comment</strong> — everything a <em>caller</em> must know to use the thing that isn't in the signature: what it does, contracts, units, side effects. It lets you use the module <em>without reading its body</em>.</li>
+    <li><strong>Implementation comment</strong> — how/why the body works, for a <em>maintainer</em>: the non-obvious algorithm, the tricky invariant.</li>
+  </ul>
+  <p>Cardinal rule: an interface comment must <strong>not</strong> describe implementation details, or you've leaked internals into the interface (<a href="../reference/glossary.html">information leakage</a> in prose). The caller's document is about <em>what</em>; the maintainer's about <em>how</em>.<sup class="cite"><a href="#s1">1</a></sup></p>
+
+  <h2>Specimen: the header comment on <code>xTaskCreate</code></h2>
+  <pre><code><span class="cmt">/**
+ * Create a new task and add it to the list of tasks that are ready to run.
+ *
+ * Internally, within the FreeRTOS implementation, tasks use two blocks of
+ * memory. ... If a task is created using xTaskCreate() then both blocks of
+ * memory are automatically dynamically allocated ...
+ */</span></code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/task.h — comment block above line 396 (verified)</p>
+  <div class="callout key">
+    <span class="label">Why this comment earns its keep</span>
+    It states the <em>abstraction</em> ("create a task, make it ready to run") in one line — which the signature alone doesn't say — then tells the caller a fact they genuinely need but <em>cannot</em> see in the type: this variant <strong>dynamically allocates</strong> two blocks of memory. That one sentence is why a caller can choose between <code>xTaskCreate</code> (heap) and <code>xTaskCreateStatic</code> (their buffer) <em>without reading either body</em> — the exact allocation tradeoff from <a href="0012-opaque-handles-and-incomplete-types.html">C12</a>. The comment does what the type couldn't: it carries the part of the contract C can't express.
+  </div>
+
+  <h2>The power move: write the comment first</h2>
+  <p>Ousterhout's most useful habit: write the interface comment <em>before</em> the code.<sup class="cite"><a href="#s1">1</a></sup> Two payoffs, and the first is the deep one:</p>
+  <ul>
+    <li><strong>It's a design check that fails cheap.</strong> If you can't describe the module simply — the comment runs long, sprouts caveats, or keeps naming internals — the module is <em>shallow</em> or leaky, and you've learned that at the moment of <em>least</em> sunk cost, before writing a line of body. That's <a href="0002-deep-vs-shallow-modules.html">A2</a>'s depth test, run at design time. The comment is a cheap prototype of the interface.</li>
+    <li><strong>It sets the abstraction.</strong> You design to the description, not the description to the code, so the interface stays about <em>what</em>, not <em>how</em>.</li>
+  </ul>
+  <p>The AI translation: the interface comment is the <em>prompt-and-contract</em>. Write it first, hand it to the model, and it's both the instruction and the acceptance test — if the generated body doesn't satisfy the comment you wrote, you have an objective failure, not a vibe. A model that writes the comment <em>after</em> merely describes whatever it produced; you want the comment to constrain the code, not narrate it.</p>
+
+  <div class="callout counter">
+    <span class="label">The strongest case against comments ("self-documenting code")</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>A comment is an apology for unclear code.</strong> The Clean-Code position: if you need a comment to explain <em>what</em> code does, rename and extract until the code says it itself. Every comment you delete by improving names is a maintenance liability removed.</li>
+      <li><strong>Comments rot and lie.</strong> Nothing forces a comment to agree with the code (same defect as names, D17). An out-of-date comment is worse than none — it actively misleads. Unchecked prose is a liability by construction.</li>
+      <li><strong>They duplicate and distract.</strong> Most comments restate the adjacent line; they add reading volume and visual noise while carrying no information.</li>
+    </ol>
+  </div>
+  <p><strong>Synthesis.</strong> The steelman is <em>right about the comments it's describing</em> — and every one of those is an <em>implementation-mechanics</em> comment (the "what/how" of a line of code). For that category, self-documenting code wins outright: rename, extract, delete the comment. But the argument has a hole it can't cover, and it's exactly the category Ousterhout cares about: <strong>some information is not derivable from the code at all, however clean.</strong> Three kinds, specifically — (a) the <em>rationale</em>: why this way and not the obvious alternative (A3's rejected options aren't in the code <em>by definition</em> — the code is what you chose, not what you rejected); (b) the <em>abstraction as a contract</em>: an interface comment lets a caller skip reading the body — no amount of clean code does that, because reading clean code is still reading the body; (c) <em>units, ranges, and non-local invariants</em> the type can't hold (C14's contracts in prose). And the "rot" objection, taken seriously, doesn't kill comments — it <em>tells you which ones to write</em>: comment the things that <em>don't change when the mechanics change</em> (rationale, contract, abstraction) and never the mechanics themselves, which the code already shows and which rot fastest. So the defensible position is precise: <em>delete every comment that restates the code; write the ones that carry what the code structurally cannot — and prefer stable interface comments over volatile implementation ones.</em> Self-documenting code and Ousterhout aren't in conflict once you sort comments by whether their information is derivable from the code.</p>
+  <details class="deep"><summary>Deep dive — the one-question test for whether a comment should exist</summary>
+  <div class="body">
+    <p>Ask: <em>is this comment's information derivable from the code by a competent reader?</em> If yes — <code>i++; // increment i</code>, or a comment restating a well-named function — delete it and, if needed, improve the name. If no — <em>why</em> we chose this over the obvious alternative, the unit is milliseconds, this must be called with the scheduler suspended, the buffer is caller-owned — it's carrying information that does not exist anywhere in the code, and it must be written down or it's lost. This single test dissolves most comment arguments: the two camps are usually talking about different sides of it. It also explains why interface comments are the highest-value kind: "what this does and how to use it without reading it" is <em>never</em> derivable from the body at a glance — that's the entire point of an interface.</p>
+  </div></details>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    A comment that restates the code (<code>i++; // increment i</code>) — pure noise, the LLM's favorite — or an interface comment describing internals a caller shouldn't depend on. Say it: <em>"This comment repeats what the code already says — delete it and let the name carry it. If there's a </em>why<em>, a contract, or an abstraction to state, write </em>that<em> instead."</em>
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 12 ("Why Write Comments?"), Ch. 13 ("Comments Should Describe Things That Aren't Obvious"), Ch. 15 ("Write The Comments First").</strong> Then take one comment from your codebase and apply the derivable-or-not test; delete it or sharpen it accordingly.</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Pick a function you're about to write and let's write its interface comment <em>first</em>, together — if it comes out long or leaky, we've found a shallow module before you built it. That comment-first reflex, plus the derivable-or-not test, <em>is</em> the skill.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 12/13/15 (comments add what code can't say; interface vs implementation; write comments first).</li>
+      <li id="s2">Specimen (verified): <code>task.h</code> interface comment above <code>xTaskCreate</code> (near line 396) vs implementation comments in <code>tasks.c</code>.</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0017-choosing-names-and-decoding-conventions.html">← Lesson 17</a>
+    <a href="0019-consistency-and-obvious-code.html">Lesson 19 — Consistency & Obvious Code →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'What must an interface comment avoid, to keep the module clean?',
+      options: [
+        'Describing the units and side effects of results',
+        'Describing implementation details a caller shouldn\u2019t need',
+        'Stating the abstraction the function provides callers'
+      ],
+      answer: 1,
+      why: 'An interface comment is the caller\u2019s document; leaking internals into it couples callers to the how \u2014 information leakage in prose. Abstraction, units, and side effects belong there; implementation detail does not.'
+    },
+    {
+      q: 'Why does writing the interface comment first act as a design check?',
+      options: [
+        'It forces documentation before the code can compile',
+        'A long or leaky comment reveals a shallow module cheaply',
+        'It guarantees the code will run correctly the first time'
+      ],
+      answer: 1,
+      why: 'If the module can\u2019t be described simply and without naming internals, it\u2019s shallow or leaky \u2014 and you learn that at minimum sunk cost. It doesn\u2019t affect compilation or guarantee correctness.'
+    },
+    {
+      q: 'The "self-documenting code" camp is correct about which comments?',
+      options: [
+        'Comments stating why a rejected alternative was avoided',
+        'Comments restating the mechanics of what code does',
+        'Interface comments letting you skip reading the body'
+      ],
+      answer: 1,
+      why: 'For mechanics \u2014 the derivable "what/how" of a line \u2014 renaming and extraction beat a comment. Rationale and interface contracts are not derivable from the code, so that camp\u2019s argument doesn\u2019t reach them.'
+    },
+    {
+      q: 'What single test best decides whether a comment should exist?',
+      options: [
+        'Is the comment shorter than the code it describes?',
+        'Is its information derivable from the code itself?',
+        'Does the comment use full sentences and punctuation?'
+      ],
+      answer: 1,
+      why: 'If a competent reader can derive it from the code, delete it (improve the name instead). If not \u2014 the why, a contract, units, an abstraction \u2014 it carries information found nowhere in the code and must be written. Length and style are irrelevant.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

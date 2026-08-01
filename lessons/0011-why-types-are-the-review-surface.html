@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 11 — Why Types Are the Review Surface</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 11 <span class="sep">/</span> Module C <span class="sep">/</span> ~15 min</p>
+  <h1>The signature is the spec</h1>
+  <p class="lede">Module C is your named priority, so it opens with its own thesis and then earns it. The claim: of everything you can review, the <em>type signature</em> gives the highest return on a reviewer's scarcest resource — attention. This lesson makes that argument rigorously, states exactly what it does <em>not</em> claim, and steelmans the case against it.</p>
+
+  <p class="mission"><b>Why this lesson:</b> "The models slopify my types and abstractions." If types are where the slop lands, they're also where you stop it — but only if you can say <em>why</em> the type is the leverage point, not just assert it. Everything later in Module C (opaque handles, illegal states, contracts, error design, API craft) is an <em>application</em> of the argument built here. Get the thesis wrong and the whole module is cargo-cult.</p>
+
+  <h2>First, the claim — stated precisely, with its limits</h2>
+  <p>The thesis is a claim about <strong>marginal return on reviewer attention</strong>, not about correctness or omnipotence. Precisely:</p>
+  <blockquote style="border-left:3px solid var(--accent-2); margin:1rem 0; padding:0.2rem 0 0.2rem 1rem; font-style:italic; color:var(--ink-soft)">
+    Per unit of a reviewer's finite attention, examining the type signatures of a change yields more design information — and more <em>enforced</em> constraint on both human and machine authors — than examining any other single surface (bodies, tests, comments, commit messages).
+  </blockquote>
+  <p>Note what this deliberately does <em>not</em> say. It does not say types catch most bugs (they don't — see the steelman below). It does not say a program is correct because it type-checks. It says: if you have ten minutes and must spend them on one surface, the signatures are where the marginal minute buys the most. Hold that scope; the whole lesson defends <em>that</em> sentence and nothing larger.</p>
+
+  <h2>Specimen: a reviewer's line-by-line read</h2>
+  <p>Open <code>./reference/FreeRTOS-Kernel/include/task.h</code>. Two declarations — the handle (line 99) and the constructor (lines 396–401):</p>
+  <pre><code><span class="kw">typedef struct</span> tskTaskControlBlock * TaskHandle_t;
+
+BaseType_t xTaskCreate( TaskFunction_t          pxTaskCode,
+                        <span class="kw">const char</span> * <span class="kw">const</span>       pcName,
+                        <span class="kw">const</span> configSTACK_DEPTH_TYPE uxStackDepth,
+                        <span class="kw">void</span> * <span class="kw">const</span>              pvParameters,
+                        UBaseType_t             uxPriority,
+                        TaskHandle_t *          <span class="kw">const</span> pxCreatedTask );</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/task.h — lines 99 &amp; 396–401 (verified)</p>
+  <p>Now read it the way a strategic reviewer does — <em>every token is a decision you can interrogate</em>:</p>
+  <ul>
+    <li><code>TaskHandle_t</code> is a pointer to a <em>struct you were never given the definition of</em> (lesson <a href="0012-opaque-handles-and-incomplete-types.html">C12</a>). Design decision, visible in the type: <em>the task's internals are hidden and you may not touch them.</em></li>
+    <li><code>const char * const pcName</code> — <em>two</em> <code>const</code>s. The first: the function won't mutate the string. The second: it won't reassign the pointer. A reviewer infers a lifetime intent — the name is borrowed, read-only — without opening the body.</li>
+    <li><code>const configSTACK_DEPTH_TYPE uxStackDepth</code> — the stack size is a <em>configurable</em> width, not a hardcoded <code>int</code>. That single token tells you the kernel is portable across 16- and 32-bit targets (lesson B9's variation seam), surfaced in a signature.</li>
+    <li><code>void * const pvParameters</code> — an escape hatch: <em>the kernel deliberately does not know your parameter's type.</em> That's a real design tradeoff (flexibility bought with a hole in type safety — the exact hole lesson <a href="0013-make-illegal-states-unrepresentable.html">C13</a> studies).</li>
+    <li><code>TaskHandle_t * const pxCreatedTask</code> as the <em>last</em> parameter, with <code>BaseType_t</code> returned — the return channel is pass/fail, the out-parameter is the result. A convention you can now check at every call site in the codebase.</li>
+    <li>Return <code>BaseType_t</code>, not <code>void</code> — <em>creation can fail</em> (out of heap), and the type forces the caller to have somewhere to notice (lesson <a href="0015-define-errors-out-of-existence.html">C15</a>). A <code>void</code> here would have hidden a failure mode.</li>
+  </ul>
+  <div class="callout key">
+    <span class="label">What just happened</span>
+    You reconstructed six independent design decisions — information hiding, borrowing semantics, portability, a deliberate type hole, a calling convention, and a failure contract — in about the time it takes to read the signature. You have not read one line of <code>tasks.c</code>. That density is not a nicety; it is the <em>entire</em> argument, and the four blades below just name why it holds.
+  </div>
+
+  <h2>The four blades — each with its mechanism</h2>
+
+  <h3>1. Review density — an information-theoretic claim</h3>
+  <p>Ousterhout defines a module's interface as "everything a developer must know to use it."<sup class="cite"><a href="#s1">1</a></sup> A signature is the maximally <em>compressed</em> encoding of that knowledge: it states the contract in the fewest tokens the language permits, and — crucially — in a form the reader is already fluent in. Six parameters above encoded what English would need three paragraphs to say. Because a reviewer's attention is finite and roughly constant per token, the surface with the highest <em>design-facts-per-token</em> is the surface with the highest return per minute. The signature is that surface by construction — it is the compression of the contract.</p>
+  <details class="deep"><summary>Deep dive — the second-order effect on where you spend attention</summary>
+  <div class="body">
+    <p>There's a compounding consequence. Because signatures are dense and bodies are sparse, attention spent on signatures scales <em>sub-linearly</em> with codebase size — you can review the public interface of a 10k-line kernel in an afternoon, but not its bodies. So as systems (and LLM output) grow, the <em>relative</em> value of interface review rises: it's the only review that stays tractable at scale. This is why senior reviewers gravitate to "let me see the headers first" — not taste, but the math of bounded attention against unbounded code. It also predicts a failure mode: a reviewer who reads bodies first burns their budget before reaching the surface that would have told them the most.</p>
+  </div></details>
+
+  <h3>2. It constrains the generator — a compile-time claim, not a review-time one</h3>
+  <p>This is the blade most people miss, and it is the AI-era crux. A type is not only something a reviewer <em>reads</em>; it is something that acts <em>before and during generation</em>. Give an author — human or model — the type <code>TaskHandle_t</code>, and they <em>cannot</em> hand you a raw <code>int</code>, cannot dereference the TCB, cannot pass a queue where a task is wanted: the compiler removes those programs from the space of things that will build. A prose instruction ("please keep the handle opaque") is a request evaluated by a fallible reader. A type is a <em>wall</em> evaluated by a machine. The difference is enforcement location: prose is honored at the author's discretion; a type is honored by <code>cc</code>.</p>
+  <div class="callout key">
+    <span class="label">The inversion that reframes the AI era</span>
+    The lazy take: "LLMs write the code now, so craft and types matter <em>less</em>." Invert it. When generation becomes cheap and abundant, the scarce, valuable things are (a) <em>constraints</em> that prune bad generations automatically and (b) <em>review surfaces</em> that stay tractable against a flood of output. A type is <strong>both</strong>. So the correct conclusion is the opposite of the lazy one: <em>the cheaper generation gets, the more valuable the type system becomes</em>, because it's the machine that says "no" without spending your attention. That is why types are Module C's thesis and not a footnote.
+  </div>
+
+  <h3>3. It's the only machine-checked contract — argued against the alternatives</h3>
+  <p>Four things claim to record a contract; only one is verified on every build. Take them in turn, honestly:</p>
+  <ul>
+    <li><strong>Comments</strong> rot, because nothing forces them to agree with the code — they are checked by no one, so they drift and eventually lie (lesson <a href="0018-comments-as-a-design-tool.html">D18</a>).</li>
+    <li><strong>Tests</strong> verify the contract only at the specific points you sampled; between those points they say nothing. They are existence proofs, not universal ones.</li>
+    <li><strong>Names</strong> are advisory; a misleading name compiles fine (lesson <a href="0017-choosing-names-and-decoding-conventions.html">D17</a>'s <code>xTaskNumber</code> wart proves it).</li>
+    <li><strong>The type</strong> is re-verified on <em>every</em> compilation, over the <em>whole</em> input space it constrains, at <em>zero marginal cost</em> to you. It is the one part of the design the compiler has agreed to police forever.</li>
+  </ul>
+  <p>So "machine-checked" is not a slogan; it's the specific property that the other three contract-carriers lack, and it's why a guarantee expressed as a type is categorically stronger than the same guarantee expressed as a comment, a test, or a name.</p>
+
+  <h3>4. It's the most durable decision — a claim about cost asymmetry</h3>
+  <p>Implementations are cheap to change because a body has one caller: the compiler. A published signature is expensive to change because its callers are <em>everyone</em>. That asymmetry means a type decision, once shipped, has the longest half-life of anything in the design — <code>xTaskCreate</code>'s shape has held for ~20 years while its body was rewritten many times. The strategic consequence cuts both ways: get the type right and you've made a decision that keeps paying dividends across every future caller; get it wrong and every caller inherits the mistake, and you can't fix it without breaking all of them. High durability is high leverage <em>and</em> high stakes — which is exactly why it deserves the most review attention.</p>
+  <details class="deep"><summary>Deep dive — Hyrum's Law, the honest caveat on "durable"</summary>
+  <div class="body">
+    <p>Durability has a dark twin. Hyrum's Law: with enough users, every <em>observable</em> behavior of your interface — not just its typed contract — becomes something someone depends on. A signature that stays fixed can still have callers depending on undocumented timing, error ordering, or side effects the type never promised. So "the type is durable" guarantees the <em>typed</em> contract is stable, not that you're free to change everything the type doesn't mention. This is why C-module later pairs types with <code>configASSERT</code> contracts (C14) and can't-fail design (C15): the type pins down what it can, and the other tools pin down what the type can't express. Durable, but not total — state both halves.</p>
+  </div></details>
+
+  <h2>The strongest case against the thesis (steelman)</h2>
+  <p>You asked to know <em>why</em> the received wisdom is true, which means taking its opposition seriously. Here is the best case against "types are the review surface," made as strongly as its advocates would make it — followed by an honest synthesis, not a dismissal.</p>
+  <div class="callout counter">
+    <span class="label">The case against</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>Types don't catch the bugs that matter.</strong> The expensive defects are semantic — wrong logic, race conditions, off-by-one, a mis-modeled requirement. A function can be perfectly typed and completely wrong. Reviewing types can give a <em>false sense of safety</em> precisely because the signature looks clean.</li>
+      <li><strong>Dynamic languages ship fine.</strong> Python and JavaScript run much of the world with no static types; whole communities argue the productivity gain of skipping them exceeds the safety loss, and that tests cover the contract better anyway.</li>
+      <li><strong>Over-typing is its own complexity.</strong> A signature drowning in generics, wrapper types, and type gymnastics can be <em>less</em> obvious than a plain one — ceremony masquerading as rigor. A shallow module with an elaborate type is still shallow (lesson <a href="0002-deep-vs-shallow-modules.html">A2</a>).</li>
+    </ol>
+  </div>
+  <p><strong>The synthesis.</strong> Every point above is true, and none of them contradicts the thesis <em>as scoped</em>. The thesis never claimed types catch most bugs — it claimed the highest <em>marginal return on attention</em>. Point (1) actually <em>supports</em> it: because a clean signature is quick to verify, it <em>frees</em> your scarce attention to spend on the semantic review where the expensive bugs live — the type is the surface you clear fastest so you can get to the hard part. Point (2) is a claim about <em>writing</em> code, not <em>reviewing</em> it under an LLM flood; and notice the industry's revealed preference — TypeScript, typed Python, Sorbet — is a decade-long migration <em>toward</em> types precisely as codebases scaled. Point (3) is real and is why blade-4 durability and A2 depth are constraints on <em>good</em> typing: the goal is types that carry contract, not types that perform rigor. So the honest position is not "types are all that matter" — it's "types are the highest-leverage surface to review <em>first</em>, and a necessary-not-sufficient foundation for the semantic review that follows." That scoped claim survives the steelman intact.</p>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    A function whose <em>signature</em> can't be understood without reading its body — a <code>void*</code> that means five different things, a <code>bool</code> whose meaning flips on a sibling argument, an <code>int</code> return that's sometimes a count and sometimes an error code. The signature is failing its one job: carrying the contract. Say it: <em>"I can't call this safely from the signature — I have to read the implementation. Push the meaning into the types."</em> Under-typed signatures are an LLM's default output (it optimizes for a body that works, not an interface that constrains); this is your standing objection.
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <p>Answer from memory — effortful recall is what builds retention, so resist scrolling up.</p>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 4 ("Modules Should Be Deep"), read with the substitution <em>interface = the type signature</em>, and Ch. 5 ("Information Hiding") for how the handle hides the TCB.</strong> Then do the drill: cover <code>tasks.c</code>, read only the <code>xTaskCreate</code> signature in <code>task.h</code>, and write out its full contract from the types alone. Check yourself against the body afterward.</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Bring me a signature — yours, or one an LLM just generated — and we'll score it on the four blades (density · constrains the generator · machine-checked · durable), run the steelman against it, and rewrite it until the type carries the contract. Push back on the thesis, too: if you think a case in the steelman actually <em>breaks</em> it, argue that with me — that's the real work.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 4–5 (interface = everything a developer must know to use a module; deep modules hide decisions behind small interfaces).</li>
+      <li id="s2">Specimen (verified): <code>./reference/FreeRTOS-Kernel/include/task.h</code> — <code>TaskHandle_t</code> typedef (line 99) and <code>xTaskCreate</code> signature (lines 396–401).</li>
+      <li id="s3">Hyrum's Law (Hyrum Wright): with enough users, every observable behavior of an interface becomes depended upon. Cited as the honest limit on "durable."</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="../index.html#course-map">← Roadmap (Module C)</a>
+    <a href="0012-opaque-handles-and-incomplete-types.html">Lesson 12 — Opaque Handles →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'The thesis is precisely a claim about which of these?',
+      options: [
+        'Types catch the majority of real program bugs',
+        'Marginal return on a reviewer\u2019s finite attention',
+        'A program is correct once it fully type-checks'
+      ],
+      answer: 1,
+      why: 'The scoped claim is about return-per-unit-attention, not correctness or bug-coverage. Keeping that scope is what lets the thesis survive the steelman \u2014 it never over-claimed.'
+    },
+    {
+      q: 'Why does cheaper LLM generation make a type system <em>more</em> valuable, not less?',
+      options: [
+        'Models write types faster than they write bodies',
+        'Constraints that auto-prune bad output become scarce',
+        'Typed code compiles faster under heavy generation load'
+      ],
+      answer: 1,
+      why: 'When generation is abundant, the scarce goods are constraints that reject bad programs without spending attention, and surfaces that stay reviewable at scale. A type is both \u2014 the inversion of the lazy "AI means craft matters less" take.'
+    },
+    {
+      q: 'Which property do comments, tests, and names all lack that the type has?',
+      options: [
+        'Being readable by a human reviewer quickly',
+        'Verification on every build over the whole input',
+        'The ability to describe the function\u2019s intent'
+      ],
+      answer: 1,
+      why: 'Comments rot, tests only sample sampled points, names are advisory \u2014 none is machine-checked across the whole input space on every build at zero marginal cost. That specific property is why a typed guarantee is categorically stronger.'
+    },
+    {
+      q: 'A steelman says "a clean signature gives false safety since types miss logic bugs." Best response?',
+      options: [
+        'Agree fully and stop reviewing type signatures',
+        'It supports the thesis \u2014 types free attention for semantics',
+        'Deny it \u2014 well-typed code has no remaining logic bugs'
+      ],
+      answer: 1,
+      why: 'Because a clean signature is fast to clear, it frees scarce attention for the semantic review where expensive bugs live. The point strengthens the scoped thesis rather than refuting it \u2014 types are necessary, not sufficient.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

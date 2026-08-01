@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 6 — Coupling &amp; Connascence</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 06 <span class="sep">/</span> ~13 min <span class="sep">/</span> <em>enrich</em></p>
+  <h1>Give the coupling a name</h1>
+  <p class="lede">"This feels too coupled" is a vibe, and vibes lose arguments in review. Connascence is a 30-year-old taxonomy that turns that vibe into a precise noun — <em>and</em> a prescription. It's the sharpest single upgrade to the words you use in a PR.</p>
+
+  <p class="mission"><b>Why this lesson:</b> Ousterhout gives you <em>deep vs shallow</em>. Connascence (Page-Jones, Weirich) gives you a <em>ruler for the dependencies themselves</em> — which coupling is strong, whether its distance makes it dangerous, and exactly how to weaken it. That's the difference between "I don't like this" and "this is connascence of position across a boundary; here's the two-line fix." The second one an LLM can't argue with, and can be told to obey.</p>
+
+  <h2>The idea: connascence = coupling you can rank</h2>
+  <p>Two pieces of code are <strong>connascent</strong> if changing one forces a matching change in the other to keep the system correct.<sup class="cite"><a href="#s1">1</a></sup> The taxonomy ranks the <em>kinds</em> by <strong>strength</strong> — how hard each is to refactor away — from the weakest (connascence of <em>name</em>) up through <em>type, meaning, position, algorithm</em>, and stronger still, the run-time (dynamic) forms. Two properties turn the rank into a decision:</p>
+  <ul>
+    <li><strong>Strength</strong> — weaker is cheaper to change. <em>Prefer weaker forms.</em></li>
+    <li><strong>Locality</strong> — strong coupling <em>inside</em> one small module is fine; the same strength stretched <em>across a boundary</em> is the problem. <em>Distance raises the cost of strength.</em></li>
+  </ul>
+  <p>The whole strategy compresses to one move: <strong>convert a stronger form into a weaker one</strong>, especially where it crosses a boundary. The full ranking, prescriptions, and Weirich's rules live in your new reference doc — <a href="../reference/connascence.html">the connascence cheat-sheet</a>. Keep it open while you read.</p>
+
+  <p><strong>What connascence does <em>not</em> claim.</strong> It is a <em>ruler</em>, not a commandment. It does not say all connascence is bad, or that you must drive it to zero — you can't; two pieces of code that must agree to be correct are connascent <em>by definition</em>, and a working system is full of necessary agreement. The claim is narrower and more useful: connascence tells you which coupling is <em>strong</em> and whether its <em>distance</em> makes that strength dangerous, so you know which one to weaken <em>first</em>. Strong connascence packed inside one small function is often perfectly fine (see the fold); the same strength stretched across a module boundary is the target. The taxonomy ranks priorities; it does not outlaw coupling.</p>
+
+  <h2>Specimen A: connascence of <em>position</em></h2>
+  <p>Open <code>./reference/FreeRTOS-Kernel/include/queue.h</code>. The workhorse send function:</p>
+  <pre><code>BaseType_t xQueueGenericSend( QueueHandle_t xQueue,
+                              <span class="kw">const void</span> * <span class="kw">const</span> pvItemToQueue,
+                              TickType_t xTicksToWait,
+                              <span class="kw">const</span> BaseType_t xCopyPosition );</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/queue.h — lines 686–690</p>
+  <p>Four positional arguments. Every call site and the function must agree on the <em>order</em>: swap <code>xTicksToWait</code> and <code>xCopyPosition</code> in the signature and every caller silently breaks — both are integer-ish types, so the compiler may not even complain. That is <strong>connascence of position</strong>, and it lives across a module boundary (kernel ↔ every caller). By the cheat-sheet's ranking it's among the stronger <em>static</em> forms — precisely because there's no name to anchor the agreement, only a slot number.</p>
+  <div class="callout key">
+    <span class="label">The downgrade</span>
+    Position → Name. Passing a named struct (<code>{ .queue=…, .ticks=…, .copyPosition=… }</code>) replaces "agree on slot 3" with "agree on the field name <code>copyPosition</code>" — connascence of <em>name</em>, the weakest form. C's ergonomics push APIs toward positional args, so this trade-off is a genuine judgment call — but naming <em>why</em> you tolerate it is the strategic act.
+  </div>
+
+  <h2>Specimen B: connascence of <em>meaning</em> — and the kernel fixing it</h2>
+  <p>Now the good-citizen half. A queue's "send to front or back?" could have been a raw <code>0</code>/<code>1</code> that caller and kernel both secretly know — classic <strong>connascence of meaning</strong> (a magic value two sides must interpret identically). Instead, in <code>projdefs.h</code> and <code>queue.h</code>:</p>
+  <pre><code><span class="cmt">/* projdefs.h &amp; queue.h — meaning turned into name */</span>
+<span class="kw">#define</span> pdPASS               ( pdTRUE )            <span class="cmt">/* not a bare 1 */</span>
+<span class="kw">#define</span> pdFAIL               ( pdFALSE )           <span class="cmt">/* not a bare 0 */</span>
+<span class="kw">#define</span> queueSEND_TO_BACK    ( ( BaseType_t ) 0 )
+<span class="kw">#define</span> queueSEND_TO_FRONT   ( ( BaseType_t ) 1 )</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/projdefs.h — lines 52–60; include/queue.h — lines 68–69</p>
+  <p>By giving the magic values names, the kernel deliberately performed the cheat-sheet's headline move: <strong>meaning → name</strong>. A caller writes <code>queueSEND_TO_FRONT</code>, not <code>1</code>; nobody has to <em>remember</em> that 1 means front. This is the same instinct as the whole codebase — the Hungarian prefixes, the opaque handles — turned on a humble constant. Seeing that the kernel does this <em>on purpose</em> is the lesson: strong coupling isn't fate, it's a thing you actively weaken.</p>
+
+  <h2>Specimen C: connascence of <em>algorithm</em> (the one to watch)</h2>
+  <p>The <code>...FromISR</code> functions take a <code>BaseType_t *pxHigherPriorityTaskWoken</code>. The contract, from the header:</p>
+  <blockquote style="border-left:3px solid var(--rule);margin:0.8rem 0;padding:0.2rem 0 0.2rem 1rem;color:var(--ink-soft);font-size:0.92rem">
+    "…will set <code>*pxHigherPriorityTaskWoken</code> to <code>pdTRUE</code> if sending caused a higher-priority task to unblock. If it sets this to <code>pdTRUE</code> then a context switch should be requested before the interrupt is exited."
+  </blockquote>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/queue.h — lines 996–999</p>
+  <p>That is a shared <strong>protocol</strong> the ISR author must execute in step with the kernel: initialise the flag to <code>pdFALSE</code>, pass its address, then <em>after</em> the call, if it's <code>pdTRUE</code>, request a yield. Caller and kernel are connascent on an <em>algorithm</em> — the strongest static form on the sheet, and it's spread across every ISR that touches a queue (high <em>degree</em>, long <em>distance</em>). The kernel accepts this cost for real-time reasons, and it pays it down the only way you can: by <em>documenting the protocol precisely</em> at the interface (your <a href="0003-a-documented-decision.html">Lesson 3</a> skill), so the shared algorithm is at least legible.</p>
+
+  <details class="deep"><summary>Deep dive — static vs dynamic connascence, and why the ISR dance is the scary kind</summary>
+  <div class="body">
+    <p>The cheat-sheet splits connascence into <em>static</em> forms (visible in the source text — name, type, meaning, position, algorithm) and <em>dynamic</em> forms (only manifest at run time — execution order, timing, value, identity). Dynamic is worse for one mechanical reason: a static agreement can be checked by <em>reading</em> or by the compiler; a dynamic one can only be caught by <em>running the exact interleaving that violates it</em>. The <code>...FromISR</code> contract is really connascence of <strong>execution order</strong> (you must yield <em>after</em> the call, not before) layered on connascence of algorithm — which is why it's the most dangerous coupling in the whole lesson: get the order wrong and it compiles, passes most tests, and drops a context switch only under load. The kernel can't downgrade it (real-time constraints make the protocol essential), so it does the next best thing — converts as much as possible to <em>static, legible</em> form: a named out-parameter, a precise header contract, and <code>configASSERT</code>s that turn some runtime violations into loud early failures (lesson <a href="0014-design-by-contract.html">C14</a>). When you can't remove strong connascence, make it as <em>static and local</em> as the problem allows.</p>
+  </div></details>
+
+  <h2>The strongest case against connascence-talk (steelman)</h2>
+  <p>An experienced reviewer might roll their eyes at the vocabulary. Steelman that reaction, then synthesise.</p>
+  <div class="callout counter">
+    <span class="label">The case against</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>It's jargon for what we already have.</strong> "Coupling" and "cohesion" have covered this for fifty years. Renaming "passing too many positional args" as "connascence of position" adds Latin, not insight.</li>
+      <li><strong>The taxonomy is over-precise.</strong> Arguing whether something is connascence of meaning vs. algorithm is angels-on-a-pin — it doesn't change what you actually do to the code.</li>
+      <li><strong>The prescriptions fight the language.</strong> "Downgrade position to name" means named-parameter structs — but C's ergonomics push hard toward positional args, so the advice is unusable where you most need it (systems C).</li>
+    </ol>
+  </div>
+  <p><strong>The synthesis.</strong> The steelman is right that connascence <em>refines</em> coupling rather than replacing it — but that refinement is exactly the value, and it's the difference between losing and winning a review. "This feels too coupled" is a vibe the author can wave off; "this is connascence of position across a module boundary, and the fix is a named struct" is a <em>ranked, located, prescriptive</em> claim they have to engage with (that's point 1 conceded and turned around). Point (2) is fair as a caution: the label matters only insofar as it changes the <em>strength</em> and therefore the priority — don't argue meaning-vs-algorithm for sport, argue it when it decides what to weaken first. Point (3) is the sharpest and the lesson already concedes it: C <em>does</em> push toward positional args, which is why the strategic act often isn't to eliminate the connascence but to <em>name it and justify tolerating it</em> — an explicit "we accept connascence of position here because C, and we contain the blast radius with asserts and a tight contract" is a real design decision, not a failure. The taxonomy's job is to make that decision <em>sayable</em>.</p>
+
+  <div class="callout key">
+    <span class="label">Munger inversion — hunt the coupling the compiler can't see</span>
+    Don't ask "is this well-decoupled?" — invert it: <em>"if I changed this, what elsewhere would have to change in lockstep, and would anything <em>tell</em> me if I forgot?"</em> The couplings that will kill you are the ones with no machine check: two same-typed positional args you can swap silently, a bare <code>1</code> both sides must interpret, an out-parameter protocol you must run in the right order. Weak connascence (name, type) is mostly caught by the compiler; strong connascence across a boundary is caught by <em>nobody</em> — which is precisely why the taxonomy ranks it worst and why that's where you spend your review attention.
+  </div>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    A function with several same-type positional args (position); a bare <code>2</code> or <code>-1</code> whose meaning both sides must know (meaning); a "call these in this exact order" out-parameter dance (algorithm/execution) — <em>especially</em> when the two parties sit in different modules. The words: <em>"That's connascence of ___ across a boundary. Downgrade it: name the constant / pass a struct / encapsulate the protocol."</em> LLMs generate all three of these by default, because each is locally convenient.
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong><a href="https://connascence.io/">connascence.io</a> — read "About" (the full taxonomy) plus the <em>Position</em> and <em>Meaning</em> pages.</strong> They're short, and each ends with the same lesson you saw here: how to downgrade to connascence of name. Then keep <a href="../reference/connascence.html">your cheat-sheet</a> as the durable reference. (Origin: Meilir Page-Jones, 1992/1996; popularised by the late Jim Weirich.)</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Bring me a function signature or an interface — yours or a model's — and we'll label every connascence in it, check each one's <em>distance</em>, and pick which to downgrade first. Doing that labelling out loud until it's reflex <em>is</em> the skill this lesson trains.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Connascence taxonomy &amp; Weirich's rules: Page-Jones (1992 CACM; 1996 book), catalogued at <a href="https://connascence.io/">connascence.io</a>. Summarised in <a href="../reference/connascence.html">the course cheat-sheet</a>.</li>
+      <li id="s2">Specimens: <code>./reference/FreeRTOS-Kernel/include/queue.h</code> (lines 686–690 args; 68–69 constants &amp; 996–999 the FromISR protocol contract) and <code>include/projdefs.h</code> (lines 52–60).</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0005-general-purpose-is-deeper.html">← Lesson 5</a>
+    <a href="0007-different-layer-different-abstraction.html">Lesson 7 — Different Layer, Different Abstraction →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'Passing a named-field struct instead of four positional args changes the coupling to…',
+      options: [
+        'connascence of type, checked fully by the compiler',
+        'connascence of name, the weakest form on the sheet',
+        'connascence of meaning, since fields still carry values'
+      ],
+      answer: 1,
+      why: 'Callers now agree on <em>field names</em>, not slot order — position downgraded to name, the weakest static form. That is the everyday connascence win.'
+    },
+    {
+      q: 'Why is <code>queueSEND_TO_FRONT</code> strategically better than a bare literal <code>1</code>?',
+      options: [
+        'It runs faster because the macro expands at compile time',
+        'It turns connascence of meaning into connascence of name',
+        'It removes the coupling between the caller and the kernel'
+      ],
+      answer: 1,
+      why: 'Naming the magic value means no one must <em>remember</em> that 1 = front; the agreement is on a name, not a meaning. The coupling isn\u2019t removed — it\u2019s weakened, which is the whole game.'
+    },
+    {
+      q: 'Two equally strong couplings: one inside a 30-line module, one across two subsystems. Which do you attack first, and why?',
+      options: [
+        'The local one, because smaller modules must stay the cleanest',
+        'The distant one, because locality makes crossing-boundary cost more',
+        'Neither differs, because strength alone decides refactoring order'
+      ],
+      answer: 1,
+      why: 'Locality: the same strength is cheap when the parties are close and expensive when far apart. Strong coupling across a boundary is the priority target; strong coupling kept local is often fine.'
+    },
+    {
+      q: 'A reviewer dismisses connascence as jargon for coupling we already understand. Best reply?',
+      options: [
+        'Agree and drop the vocabulary; coupling and cohesion suffice here',
+        'It ranks and locates the coupling, turning a vibe into a fix demand',
+        'Insist the Latin terms are always clearer than plain coupling talk'
+      ],
+      answer: 1,
+      why: 'The refinement is the point: \u201cconnascence of position across a boundary, fix with a named struct\u201d is ranked, located and prescriptive, so the author must engage — where \u201cfeels too coupled\u201d can be waved off.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

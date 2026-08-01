@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 19 — Consistency & Obvious Code</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 19 <span class="sep">/</span> Module D finale <span class="sep">/</span> ~13 min</p>
+  <h1>Consistency is a force multiplier for the reader</h1>
+  <p class="lede">Consistency lets a reader learn a pattern once and apply it everywhere, converting unknowns into knowns. It's the cheapest way to make a large codebase obvious — and a documented <em>deviation</em> is how you stay consistent while breaking a rule on purpose. But "a foolish consistency is the hobgoblin of little minds," so we'll find where consistency becomes a cage.</p>
+
+  <p class="mission"><b>Why this lesson:</b> This closes Module D and rhymes with <a href="0003-a-documented-decision.html">A3</a>: obvious code plus documented exceptions. It's also the perfect AI-era discipline — an LLM is a consistency-breaking machine (it averages over the world, not your repo), so "does this match how we already do it, and if not, is the exception recorded?" becomes one of your highest-frequency review questions. But applied dogmatically, consistency also blocks every improvement — so the skill is knowing when to break it.</p>
+
+  <h2>The principle (APoSD ch17–18)</h2>
+  <p>Ousterhout: consistency reduces cognitive load and unknown-unknowns — if similar things are done similarly, a reader relies on instincts instead of re-verifying each case.<sup class="cite"><a href="#s1">1</a></sup> Code is <strong>obvious</strong> when a reader forms the right conclusion quickly, without much thought. Consistency is one of the biggest contributors to obviousness; surprising one-offs are one of its biggest enemies. The mechanism is specifically about the reader's <em>prior</em>: consistency lets them predict the unseen from the seen, and every violation silently poisons that prediction everywhere.</p>
+
+  <h2>Specimen: how a safety-critical codebase records its exceptions</h2>
+  <p>The kernel conforms to MISRA C:2012 — a strict, consistent rule set — but a small kernel sometimes <em>must</em> break a rule for footprint or performance. It never does so silently. In <code>./reference/FreeRTOS-Kernel/MISRA.md</code>:</p>
+  <pre><code><span class="cmt">#### Dir 4.7</span>
+MISRA C:2012 Dir 4.7: If a function returns error information, then that
+error information shall be tested.
+
+<span class="cmt">_Ref 4.7.1_</span>
+ - taskENTER_CRITICAL_FROM_ISR returns the interrupt mask and not any error
+   information. Therefore, there is no need to test the return value.</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/MISRA.md — deviation records, checked by Coverity 2023.6.1 (verified)</p>
+  <div class="callout key">
+    <span class="label">The pattern (you've seen its shape before)</span>
+    Every deviation carries three things: the <strong>rule</strong> broken, a grepable <strong>reference tag</strong> (<code>Ref 4.7.1</code>) that ties to the exact inline suppression in the source, and a <strong>justification</strong>. This is <a href="0003-a-documented-decision.html">A3</a>'s <em>objection → justification → evidence → escape hatch</em> at codebase scale: the rule is the objection, the note is the justification, the Coverity tag is traceable evidence. Consistency isn't "never break the rule" — it's "<strong>break it only in the open, with a reason the next reader can find.</strong>"
+  </div>
+
+  <h2>Why documented deviation beats both alternatives</h2>
+  <p>Invert and look at the two failures it avoids. <strong>Silent deviation</strong> (break the rule, say nothing) destroys the reader's trust in the convention — now they must suspect <em>every</em> line, and the consistency is worthless everywhere, not just at the exception. <strong>Rigid conformance</strong> (never deviate) forces ugly or slower code to satisfy a rule that genuinely shouldn't apply here. The documented deviation keeps the value of consistency (readers still trust the rule holds <em>unless</em> a visible note says otherwise) while paying the real cost only at the one place it can't hold. That's mature engineering judgment made auditable — and it's the institutional version of the same move you make in a single well-commented line.</p>
+
+  <div class="callout counter">
+    <span class="label">The strongest case against consistency</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>"A foolish consistency is the hobgoblin of little minds."</strong> (Emerson.) Consistency with a <em>bad</em> pattern just propagates the mistake uniformly. Matching the surrounding code can mean copying its flaws — the codebase gets predictably wrong.</li>
+      <li><strong>It ossifies.</strong> Once a convention is everywhere, any improvement now creates an inconsistency, so the pressure is always to conform to the old way. Consistency becomes a ratchet that resists better ideas — the more consistent you are, the more expensive it is to improve.</li>
+      <li><strong>It can be cargo-culted.</strong> Enforcing "we always do X here" without knowing <em>why</em> X was chosen turns a once-reasoned convention into ritual — and rituals outlive the conditions that justified them.</li>
+    </ol>
+  </div>
+  <p><strong>Synthesis.</strong> Emerson's full quote is the key — a <em>foolish</em> consistency, not consistency as such — and the adjective is the whole judgment. Consistency's value is precisely measured: it's the amount of <em>unknown</em> it removes for the reader. So the decision rule follows directly: <strong>deviate when the value of the improvement exceeds the cost of the surprise it introduces — and when you do, document the deviation so the surprise cost drops toward zero.</strong> That reconciles both sides. Point (1): if the pattern is actively bad, the improvement's value is high and you should break it — but for the <em>whole</em> codebase in a migration, not as a lone one-off, because a single inconsistent fix pays the surprise cost without capturing the systemic value. Point (2): the ratchet is real, which is why deviations must be <em>cheap to make legibly</em> — a good deviation-record convention (like MISRA.md) is what keeps consistency from ossifying, because it lets you break the rule <em>without</em> destroying the reader's trust. Point (3): the antidote to cargo-cult is that every convention should have a recoverable rationale (A3 again) — so a reviewer can ask "why do we do X?" and get an answer, and retire X when its reason expires. So the mature stance isn't "be consistent" or "be free"; it's: <em>consistency is the default because it removes unknowns; deviate deliberately when the improvement outweighs the surprise; and always leave a note, because a documented exception is what makes both consistency and change safe.</em></p>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    A one-off that departs from how the rest of the codebase does the same thing, with <em>no</em> note explaining why — the LLM special-casing something because it didn't look at the neighbors. Say it: <em>"This breaks our established pattern. Either conform, or if the deviation is justified, record the reason where the next reader will find it — a silent exception erodes trust in the whole convention."</em> And its inverse, so you're not a hobgoblin: <em>"We're matching a pattern that's actually wrong here — if it's worth fixing, let's fix it codebase-wide and note the change, not conform to a mistake."</em>
+  </div>
+
+  <div class="callout key">
+    <span class="label">Module D, in one line</span>
+    Precise, consistent, honest <strong>names</strong>, split into the kind that carries meaning vs the kind that just restates the type (<a href="0017-choosing-names-and-decoding-conventions.html">D17</a>); <strong>comments</strong> that carry only what the code can't say, written first (<a href="0018-comments-as-a-design-tool.html">D18</a>); <strong>consistency</strong> as the unknown-removing default, with deliberate, documented deviations (D19). Readability isn't decoration — it's the interface between the code and every future reader, human or model. <em>Obvious code is a strategic asset.</em>
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 17 ("Consistency") and Ch. 18 ("Code Should Be Obvious").</strong> Then read <code>MISRA.md</code> end to end and pick one deviation whose justification convinces you and one you'd push back on — and for the second, decide whether it's a <em>foolish</em> consistency you'd break codebase-wide.</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Bring me a spot where your code (or an LLM's) breaks the local pattern, and we'll decide together: conform, or write the deviation record — and if the pattern itself is the problem, plan the codebase-wide fix. Drafting that record — rule, reason, traceable tag — <em>is</em> the skill, and it's the same muscle as A3.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 17 (consistency) &amp; ch. 18 (obvious code).</li>
+      <li id="s2">Specimen (verified): <code>MISRA.md</code> — documented deviation records (Dir 4.7, Rule 8.4) with grepable Coverity reference tags.</li>
+      <li id="s3">Ralph Waldo Emerson, "Self-Reliance" (1841) — "A foolish consistency is the hobgoblin of little minds." Cited for the deviate-deliberately synthesis.</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0018-comments-as-a-design-tool.html">← Lesson 18</a>
+    <a href="../index.html#course-map">Module E next ↗</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'Why does consistency reduce cognitive load for a reader?',
+      options: [
+        'It makes the source files noticeably shorter',
+        'It lets them predict the unseen from the seen',
+        'It allows the compiler to optimize more aggressively'
+      ],
+      answer: 1,
+      why: 'When similar things are done similarly, a reader forms correct expectations without re-checking each case \u2014 unknowns become knowns. It is about the reader\u2019s prediction, not file size or optimization.'
+    },
+    {
+      q: 'What are the three parts of a good MISRA deviation record?',
+      options: [
+        'The author, the date, and the review approver',
+        'The rule, a traceable tag, and a justification',
+        'The severity, a fix estimate, and a test case'
+      ],
+      answer: 1,
+      why: 'Each deviation names the rule broken, a grepable tag to the exact suppression, and a reason \u2014 the A3 shape at codebase scale. Authorship and severity aren\u2019t what make the exception auditable.'
+    },
+    {
+      q: 'What is the precise decision rule for when to break consistency?',
+      options: [
+        'Break it whenever a cleaner local option exists',
+        'Never break it once a convention is established',
+        'When the improvement exceeds the surprise cost \u2014 and document it'
+      ],
+      answer: 2,
+      why: 'Consistency\u2019s value is the unknowns it removes; deviate when the improvement outweighs the surprise it introduces, and document to drive the surprise cost toward zero. Neither always-conform nor always-improve is right.'
+    },
+    {
+      q: 'Emerson\u2019s "foolish consistency" warning most directly cautions against what?',
+      options: [
+        'Uniformly propagating a bad pattern as ritual',
+        'Writing any deviation records at all',
+        'Using static analysis tools like Coverity'
+      ],
+      answer: 0,
+      why: 'The adjective "foolish" is the point: consistency with a bad or unreasoned pattern spreads the mistake and ossifies it. The cure is deviating deliberately when justified and keeping each convention\u2019s rationale recoverable.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

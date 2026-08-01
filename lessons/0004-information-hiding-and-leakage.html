@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 4 — Information Hiding &amp; Leakage</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 04 <span class="sep">/</span> Module A <span class="sep">/</span> ~12 min</p>
+  <h1>The struct you're not allowed to see</h1>
+  <p class="lede">Lesson 2 asked <em>whether</em> a module is deep. This one asks <em>how</em> it got that way. The answer is almost always the same move: a design decision was sealed inside the implementation so it never reached the interface. In C, that move has a name and a mechanism — and the kernel runs it in two lines.</p>
+
+  <p class="mission"><b>Why this lesson:</b> "The model slopifies my abstractions" usually means it let an internal decision escape into the interface — a leaked field, a struct in the header, a getter that exposes the representation. To catch that in a PR you need to see hiding and its failure, leakage, as concrete, nameable things. Today you watch the kernel hide an entire data structure in plain sight.</p>
+
+  <h2>The idea: depth comes from hiding</h2>
+  <p>Ousterhout's mechanism for making modules deep is <strong>information hiding</strong>: bury each design decision inside one module's implementation so it never appears in the interface.<sup class="cite"><a href="#s1">1</a></sup> The failure mode is its mirror image — <strong>information leakage</strong>: a decision that shows up in the interface, or in more than one module, so callers now depend on knowledge they should never have needed.<sup class="cite"><a href="#s2">2</a></sup></p>
+  <div class="compare">
+    <div class="col-good">
+      <h4><span class="chip deep">hidden</span> good</h4>
+      <p>The decision lives in exactly one implementation. Callers can't see it, can't depend on it, aren't broken when it changes. The interface stays tiny — the module stays deep.</p>
+    </div>
+    <div class="col-bad">
+      <h4><span class="chip shallow">leaked</span> costly</h4>
+      <p>The decision is visible — a public field, a header struct, a shared format. Now N callers know it. Change it and you get <a href="../reference/glossary.html">change amplification</a> across all N. The interface bloats — the module goes shallow.</p>
+    </div>
+  </div>
+  <div class="callout key">
+    <span class="label">The reviewer's test</span>
+    Point at any design decision (a data layout, an algorithm, a lock scheme, a wire format) and ask: <strong>how many modules know this?</strong> The strategic answer is <em>one</em>. If a caller can name it, depend on it, or break when it changes, it has leaked.
+  </div>
+
+  <p><strong>What this does <em>not</em> claim.</strong> "Hide information" is not "make every field private," not "wrap all data in getters," and not a security property (an opaque handle stops <em>coupling</em>, not an attacker). The precise claim is about <em>design decisions that are likely to change</em>: those belong in exactly one module. Plenty of things are legitimately public — a plain value type, a stable constant, a config struct the caller is <em>meant</em> to fill in (lesson <a href="0008-pull-complexity-downward.html">B8</a>'s <code>xTaskCreateStatic</code> buffers). A public field is a leak only when it exposes a decision callers could then depend on. Hiding the wrong things — or hiding reflexively — is its own cost, which the steelman below makes concrete.</p>
+
+  <h2>Specimen: the handle that hides a data structure</h2>
+  <p>Open <code>./reference/FreeRTOS-Kernel/include/queue.h</code>. This is the <em>entire</em> definition of a queue that a caller is ever given:</p>
+  <pre><code><span class="cmt">/* queue.h — everything the caller sees of a queue's shape */</span>
+<span class="kw">struct</span> QueueDefinition;   <span class="cmt">/* forward-declared: named, but no body */</span>
+<span class="kw">typedef</span> <span class="kw">struct</span> QueueDefinition * QueueHandle_t;</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/queue.h — lines 50–51</p>
+  <p>That first line is an <strong>incomplete type</strong>: the struct is <em>named</em> but its members are not declared here. A caller can hold a <code>QueueHandle_t</code> (a pointer to it), pass it around, and store it — but the compiler will <em>refuse</em> to let them dereference it or touch a field, because from the header's point of view the struct has no fields. The wall isn't a convention or a comment. It's enforced by the type system.</p>
+
+  <p>Now open <code>./reference/FreeRTOS-Kernel/queue.c</code> and look at what that handle actually points to — the body that only the implementation can see (abridged):</p>
+  <pre><code><span class="cmt">/* queue.c — the body, visible ONLY inside the implementation */</span>
+<span class="kw">typedef struct</span> QueueDefinition
+{
+    int8_t * pcHead;            <span class="cmt">/* storage area           */</span>
+    int8_t * pcWriteTo;         <span class="cmt">/* next free slot         */</span>
+    <span class="kw">union</span> {
+        QueuePointers_t xQueue;      <span class="cmt">/* fields when it's a queue     */</span>
+        SemaphoreData_t xSemaphore;  <span class="cmt">/* fields when it's a semaphore */</span>
+    } u;
+    List_t xTasksWaitingToSend;      <span class="cmt">/* blocked senders, priority-ordered */</span>
+    List_t xTasksWaitingToReceive;   <span class="cmt">/* blocked receivers                 */</span>
+    <span class="kw">volatile</span> UBaseType_t uxMessagesWaiting;
+    UBaseType_t uxLength, uxItemSize;
+    <span class="kw">volatile</span> int8_t cRxLock, cTxLock;   <span class="cmt">/* ISR-era lock counters */</span>
+    <span class="cmt">/* ... plus fields that appear ONLY under
+       configSUPPORT_STATIC_ALLOCATION, configUSE_QUEUE_SETS,
+       configUSE_TRACE_FACILITY ... */</span>
+} xQUEUE;</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/queue.c — lines 103–136</p>
+
+  <p>Count what just got hidden behind those two header lines. Every one of these is a design decision the caller never learns, never depends on, and never breaks when it changes:</p>
+  <ul>
+    <li><strong>That a semaphore reuses this exact struct</strong> — via the <code>union u</code>. That's how Lesson 2's "a semaphore <em>is</em> a queue" is physically true. The reuse decision is sealed in here.</li>
+    <li><strong>How blocked tasks are tracked</strong> — two priority-ordered lists. Callers just see "it blocks"; the bookkeeping is invisible.</li>
+    <li><strong>The whole ISR concurrency scheme</strong> — <code>cRxLock</code> / <code>cTxLock</code>. A caller of <code>xQueueSend</code> never learns locks exist.</li>
+    <li><strong>Which fields even exist</strong> — several members appear only under config macros. The struct's <em>size and shape change with the build</em>, and no caller can encode an assumption about it.</li>
+  </ul>
+  <div class="callout key">
+    <span class="label">Verdict</span>
+    The <strong>opaque handle</strong> (a typedef'd pointer to an incomplete type) is information hiding rendered in C, and enforced by the compiler. One header line buys a wall that a dozen internal decisions hide behind — which is <em>precisely</em> why the queue module reads as deep. Depth isn't a vibe; it's the count of decisions you managed to keep on one side of that wall.
+  </div>
+
+  <h2>What leakage would have looked like</h2>
+  <p>Picture the "helpful" version — the one an unsupervised LLM writes because it's convenient: put the full <code>struct QueueDefinition</code> body in <code>queue.h</code>. It compiles. It even feels friendlier: now a caller can write <code>if( q-&gt;uxMessagesWaiting &gt; 0 )</code> instead of calling an API. And that is the catastrophe:</p>
+  <ul>
+    <li>Every file that includes <code>queue.h</code> now <em>depends on the layout</em>. Add a trace field, reorder the union, rename <code>cRxLock</code> — and you recompile and potentially rewrite the world (<a href="../reference/glossary.html">change amplification</a>).</li>
+    <li>The <code>union</code> trick becomes load-bearing public knowledge; you can never quietly change how semaphores are stored again.</li>
+    <li>Callers poke <code>uxMessagesWaiting</code> directly, racing the very lock scheme that field exists to protect. The concurrency decision <em>leaked</em>, so it can now be violated.</li>
+  </ul>
+  <p>Same behaviour on day one. On day one hundred, one is a kernel refined for twenty years and the other is unshippable. That contrast — <span class="chip deep">one wall, decisions hidden</span> vs <span class="chip shallow">no wall, decisions leaked</span> — <em>is</em> the judgment you're training.</p>
+
+  <details class="deep"><summary>Deep dive — the exact price C charges for that wall, and why the kernel pays it</summary>
+  <div class="body">
+    <p>Opacity is not free, and naming its cost is what keeps this from being dogma. Because callers never see <code>struct QueueDefinition</code>'s body, they also can't ask its <em>size</em> — <code>sizeof(QueueDefinition)</code> is a compile error outside <code>queue.c</code>. That single consequence forces the whole design: the queue must be constructed <em>through the module</em>, so its memory is either heap-allocated inside <code>xQueueCreate</code> or supplied blind as an opaque <code>StaticQueue_t</code> byte-blob the caller declares but cannot inspect. You lose stack allocation of a real queue, you lose field-level debugging without the internal header, and you pay one pointer indirection on every access. The kernel accepts all of it — <em>because</em> of the very thing the union in the struct revealed: the layout genuinely changes with build config (<code>configUSE_QUEUE_SETS</code>, trace, static-alloc). A caller who could see the struct would encode assumptions that a different build silently breaks. So opacity here isn't taste; it's the price of a struct whose shape is <em>not stable</em>, paid to buy a handle that is. (Lesson <a href="0012-opaque-handles-and-incomplete-types.html">C12</a> studies this handle as a topic in its own right.)</p>
+  </div></details>
+
+  <h2>The strongest case against reflexive hiding (steelman)</h2>
+  <p>Encapsulation has a serious opposition, and a strategic reviewer can state it better than its critics. Then synthesise.</p>
+  <div class="callout counter">
+    <span class="label">The case against</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>Opacity costs real ergonomics.</strong> You can't <code>sizeof</code> it, can't stack-allocate it, can't inspect fields in a debugger without internal headers, and you eat indirection. For a small, stable struct that's pure friction — hiding buys nothing and taxes everyone.</li>
+      <li><strong>Getter/setter theatre.</strong> "Hide everything" degenerates into a wall of pass-through accessors that expose the same fields one call at a time — the representation leaks anyway, now with more boilerplate and a <a href="0002-deep-vs-shallow-modules.html">shallower</a> interface.</li>
+      <li><strong>Premature encapsulation.</strong> Hiding a decision behind an interface <em>before</em> you know the right boundary can freeze the wrong abstraction — sometimes exposing the data and refactoring later is cheaper than guessing the wall's location now.</li>
+    </ol>
+  </div>
+  <p><strong>The synthesis.</strong> Each critique lands on <em>bad</em> hiding, and the scoped claim already excludes it. The test was never "hide everything" — it was "hide the decisions <em>likely to change</em>." A small, genuinely stable value type fails that test, so (1) is not a counter-example, it's the rule working: don't wall off what won't move. Point (2) is the deepest — a screen of getters that hand out every field <em>is</em> leakage wearing a trench coat (lesson <a href="0005-general-purpose-is-deeper.html">A5</a>'s <code>void * pvOwner</code> shows the alternative: expose a <em>capability</em>, not the representation). Point (3) is real and is why hiding follows Parnas's rule — wall off the axis you can <em>predict</em> will change (lesson <a href="0009-isolate-what-changes.html">B9</a>), not every axis speculatively. The queue passes all three tests at once: its layout demonstrably changes with build config, so hiding it is neither premature nor theatrical — it's the one decision most worth sealing.</p>
+
+  <div class="callout key">
+    <span class="label">Munger inversion — measure hiding by what breaks</span>
+    Don't ask "is this encapsulated?" — invert it: <em>"if I changed this layout tonight, how many files would fail to compile tomorrow?"</em> One (the implementation) means the decision is hidden. A dozen means it has leaked, and you've just measured the blast radius of a change you haven't even made yet. The kernel's answer is always one file — which is <em>why</em> twenty years of internal rewrites never broke a caller. Leakage is just a large blast radius you can't see until you light the fuse.
+  </div>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    A struct definition in a public header when callers only need a handle; a "convenience" getter that returns an internal field by reference; a comment like <em>"callers may read <code>x</code> directly."</em> The words: <em>"This leaks the representation — every caller now depends on a decision that should live in one place. Hand them an opaque handle and an accessor, and keep the layout private."</em>
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 5 ("Information Hiding and Leakage").</strong> The chapter behind today's whole lesson. Then re-read it with the specimen open: the two lines in <code>queue.h</code> and the struct body in <code>queue.c</code> are Ch. 5 made physical. (Lesson 11 will return to this exact mechanism — the opaque handle — as a topic in its own right.)</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Bring me a header from your own work — or point me at another file in <code>./reference/</code> — and we'll hunt for leaks together: which decisions escaped into the interface, and how you'd wall them back in. Finding the leak out loud <em>is</em> the skill.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 5 (information hiding as the mechanism behind deep modules).</li>
+      <li id="s2">Leakage &amp; the incomplete-type wall: <code>./reference/FreeRTOS-Kernel/include/queue.h</code> lines 50–51 (handle) vs <code>./reference/FreeRTOS-Kernel/queue.c</code> lines 103–136 (hidden struct body).</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0003-a-documented-decision.html">← Lesson 3</a>
+    <a href="0005-general-purpose-is-deeper.html">Lesson 5 — General-Purpose Is Deeper →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'Why can a caller hold a <code>QueueHandle_t</code> but never read <code>q-&gt;uxMessagesWaiting</code>?',
+      options: [
+        'The header declares that field as a private member',
+        'The header names the struct but declares no fields',
+        'The kernel style guide forbids callers from doing it'
+      ],
+      answer: 1,
+      why: 'It is an <em>incomplete type</em>: <code>struct QueueDefinition;</code> gives the name with no body, so the compiler knows of no fields to access. The wall is the type system, not a rule or a convention.'
+    },
+    {
+      q: 'Moving the full <code>struct QueueDefinition</code> body into <code>queue.h</code> would most directly cause what?',
+      options: [
+        'Change amplification across every file that includes it',
+        'A deeper module, since callers can now see more of it',
+        'A compile error, because the struct is already complete'
+      ],
+      answer: 0,
+      why: 'Every includer would depend on the layout, so any internal change ripples outward. Visibility does not deepen a module — it leaks its decisions and makes it shallower.'
+    },
+    {
+      q: 'What is the strategic answer to "how many modules should know this decision?"',
+      options: [
+        'As many as need it, to avoid extra accessor calls',
+        'Exactly one — the module that implements the decision',
+        'Two, so a reviewer can cross-check the invariant safely'
+      ],
+      answer: 1,
+      why: 'A decision known to one module can change freely and cannot be depended on from outside. The moment a second module knows it, it has leaked — and callers couple to knowledge they should not hold.'
+    },
+    {
+      q: 'A reviewer objects that opaque handles cost indirection and block stack allocation. Best synthesis?',
+      options: [
+        'They are right, so expose the struct body in the public header',
+        'True costs, paid here because the layout changes with build config',
+        'Irrelevant, since hiding is always worth any price you must pay'
+      ],
+      answer: 1,
+      why: 'The costs are real, but the queue\u2019s shape genuinely varies with config macros, so a visible struct would let callers encode assumptions a different build breaks. You hide what is likely to change — not everything, and not nothing.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

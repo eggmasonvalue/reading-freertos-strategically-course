@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 2 — Deep vs Shallow Modules</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 02 <span class="sep">/</span> Module A <span class="sep">/</span> ~12 min</p>
+  <h1>Deep doors, small handles</h1>
+  <p class="lede">The single most useful lens a reviewer owns: is this module <em>deep</em> or <em>shallow</em>? Learn to see it, and half of "this abstraction feels wrong" becomes something you can actually say out loud.</p>
+
+  <p class="mission"><b>Why this lesson:</b> "The models slopify my types and abstractions" is really a complaint about shallowness. To catch it in a PR you need a crisp, defensible test for module depth. Today we build that test on a genuinely beautiful piece of the FreeRTOS kernel.</p>
+
+  <h2>The idea in one picture</h2>
+  <p>Ousterhout: a module has an <strong>interface</strong> (what a caller must know) and an <strong>implementation</strong> (the code behind it). Depth is the ratio.<sup class="cite"><a href="#s1">1</a></sup></p>
+  <div class="compare">
+    <div class="col-good">
+      <h4><span class="chip deep">deep</span> good</h4>
+      <p>Small interface, large functionality. A tiny door onto a big room. You learn a little, you get a lot. Cost &lt; benefit.</p>
+    </div>
+    <div class="col-bad">
+      <h4><span class="chip shallow">shallow</span> costly</h4>
+      <p>Large interface, little functionality. You pay almost the full implementation cost just to <em>use</em> it. Often a thin wrapper. Cost &gt; benefit — a net negative even when the code "works."</p>
+    </div>
+  </div>
+  <div class="callout key">
+    <span class="label">The reviewer's test</span>
+    For any module, ask two questions: <strong>(1) How much must a caller know to use it?</strong> (interface size — parameters, ordering rules, error modes, invariants they must maintain). <strong>(2) How much work does it do on their behalf?</strong> (hidden functionality). Deep = little knowledge buys much work. Shallow = much knowledge buys little.
+  </div>
+
+  <p><strong>What depth does <em>not</em> claim.</strong> Hold the scope precisely, because it's easy to over-read. Depth is a claim about the <em>ratio</em> of hidden functionality to interface size — <em>not</em> that big modules are good, that fewer methods are always better, or that a deep module is <em>correct</em>. A module can be beautifully deep and still compute the wrong thing; depth measures the quality of the <em>abstraction boundary</em>, not the logic behind it. Nor does "shallow" mean "delete it": some thin modules earn their place (a stable adapter over a volatile dependency — lesson <a href="0007-different-layer-different-abstraction.html">B7</a>). The test tells you the cost/benefit of an interface, which is one input to judgment, not the whole verdict.</p>
+
+  <h2>Specimen: a semaphore <em>is</em> a queue</h2>
+  <p>Open <code>./reference/FreeRTOS-Kernel/include/semphr.h</code>. Near the top, the entire type definition of a semaphore is this:</p>
+  <pre><code><span class="cmt">/* semphr.h */</span>
+<span class="kw">typedef</span> QueueHandle_t SemaphoreHandle_t;</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/semphr.h — line 38</p>
+  <p>That's not a typo or a shortcut. It's a design decision worth pausing on. A semaphore in FreeRTOS is a queue of length 1 that stores items of size 0 — you don't care about the <em>data</em>, only whether the queue is "full" or "empty."<sup class="cite"><a href="#s2">2</a></sup> "Give" pushes; "take" pops. So the entire semaphore/mutex family is built by <em>reusing</em> the queue — one deep implementation, several interfaces on top:</p>
+  <pre><code><span class="cmt">/* semphr.h — a "create" is a thin, honest wrapper over the queue */</span>
+<span class="kw">#define</span> xSemaphoreCreateBinary()  \
+    xQueueGenericCreate( ( UBaseType_t ) 1, semSEMAPHORE_QUEUE_ITEM_LENGTH, \
+                         queueQUEUE_TYPE_BINARY_SEMAPHORE )</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/semphr.h — line 167</p>
+
+  <p>Now weigh the queue module itself against the reviewer's test. The caller writes:</p>
+  <pre><code>xQueueSend( q, &amp;msg, xTicksToWait );</code></pre>
+  <p>Three arguments. What the implementation does <em>for</em> them, hidden entirely behind the interface:</p>
+  <ul>
+    <li>copies the item into the queue's storage,</li>
+    <li>if full, blocks the calling task for up to <code>xTicksToWait</code> and puts it on a waiting list,</li>
+    <li>when space appears, unblocks the highest-priority waiter,</li>
+    <li>and may trigger a context switch so that waiter runs immediately.</li>
+  </ul>
+  <div class="callout key">
+    <span class="label">Verdict</span>
+    A handful of parameters buys you inter-task communication, blocking, timeouts, priority-ordered wakeups, and scheduling. That is a <span class="chip deep">deep</span> module — and it's <em>so</em> deep that semaphores and mutexes could be built on it for free. Depth compounds: deep modules make <em>other</em> modules simpler.
+  </div>
+
+  <h2>What shallow would have looked like</h2>
+  <p>Imagine the tactical-tornado (or unsupervised-LLM) version: separate <code>SemaphoreStruct</code>, <code>BinarySemaphore</code>, <code>CountingSemaphore</code>, and <code>Mutex</code> types, each with its own create/give/take/delete, each re-implementing a waiting list and timeout logic. It would "work." It would also quadruple the interface, leak the same waiting-list decision into four modules (<a href="../reference/glossary.html">information leakage</a>), and quadruple the bugs. Same behaviour, four times the complexity. That contrast — one deep module vs four shallow ones — <em>is</em> the strategic judgment you're training.</p>
+
+  <details class="deep"><summary>Deep dive — the second-order effect, and why "deep" is not "as much hidden as possible"</summary>
+  <div class="body">
+    <p>Two things the ratio alone hides. First, depth <em>compounds</em>: because the queue hid enough real machinery, semaphores and mutexes were built on it <em>for free</em> — a deep module makes the modules above it simpler, so the payoff is not linear in one interface but multiplied across every client that reuses it (lesson <a href="0005-general-purpose-is-deeper.html">A5</a> is this effect at full scale). Second, depth has a failure twin: a "God object" that hides a hundred unrelated decisions behind one interface also scores well on "much work per token" — yet it is a design disaster, because the hidden things don't <em>belong</em> together (lesson <a href="0010-better-together-or-apart.html">B10</a>). So the real test is not "maximise hidden functionality" but "hide the decisions that <em>cohere</em> behind the smallest honest interface." The queue passes because everything it hides serves one job: move items between tasks safely. Depth without cohesion is just a big bucket.</p>
+  </div></details>
+
+  <h2>The strongest case against the depth lens (steelman)</h2>
+  <p>Take the best case <em>against</em> using deep-vs-shallow as your primary tool, made as its advocates would — then an honest synthesis.</p>
+  <div class="callout counter">
+    <span class="label">The case against</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>It's unmeasurable.</strong> "Interface size" and "functionality" have no units. Two reviewers can look at the same module and disagree on whether it's deep — so it's just "elegant/inelegant" with a diagram, and it loses arguments to anyone who says "looks fine to me."</li>
+      <li><strong>Thin wrappers are often correct.</strong> Adapters, facades, ports-and-adapters seams, and stable public names over volatile internals are all deliberately shallow — and good. A rule that flags them all as "cost without benefit" cries wolf.</li>
+      <li><strong>Depth can hide too much.</strong> A very deep module can bury a decision you actually needed to see — a lock policy, a performance cliff, an allocation. Sometimes the shallower interface that <em>surfaces</em> the important knob is the better design.</li>
+    </ol>
+  </div>
+  <p><strong>The synthesis.</strong> All three are real and none breaks the lens <em>as scoped</em>. On (1): the test isn't a metric, it's a <em>question</em> — its value is that it turns "feels wrong" into a specific, answerable "how much must a caller know vs. how much do they get?", which is exactly the sentence that <em>wins</em> a review because the other person now has to answer it too. On (2): the lens agrees — that's why depth is a cost/benefit ratio, not a size rule, and why B7 studies precisely when a thin seam is worth it; "shallow" is a prompt to ask "what is this hiding?", not an automatic delete. On (3) it fully concedes and sharpens: the goal is to hide the decisions that should be hidden and <em>surface</em> the ones the caller must own (lesson <a href="0008-pull-complexity-downward.html">B8</a> is that judgment). So the honest position is "deep-vs-shallow is the first and highest-yield question to ask, not the last word" — which survives the steelman intact.</p>
+
+  <div class="callout key">
+    <span class="label">Munger inversion — find the shallow module by trying to break it</span>
+    Don't ask "is this deep?" — invert it: <em>"what would I have to know to use this safely, and how much of that is the module's job to have hidden?"</em> If the honest list of things-you-must-know is nearly as long as the module's own code, you've found a shallow module without needing a metric. The tell is a wrapper you can't use without reading its body — the interface failed to buy you anything.
+  </div>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    A "wrapper" whose interface is as large as the thing it wraps, and that adds no hidden work, is a <span class="chip shallow">shallow</span> module — a classic LLM output. The right words: <em>"This wrapper isn't deep — the interface is as big as what it delegates to, so it adds cost without hiding a decision. What is it hiding?"</em>
+  </div>
+
+  <hr class="rule">
+  <h2>Skill drill: judge the module</h2>
+  <p>For each, apply the two-question test before answering. Deep or shallow?</p>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 4 ("Modules Should Be Deep") and Ch. 5 ("Information Hiding").</strong> The 20 pages that most directly upgrade your review eye. Then, for the specimen, skim <code>./reference/FreeRTOS-Kernel-Book/ch07.md</code> (semaphores/mutexes) to see the same reuse described from the user's side.</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Want to test the test? Name any module from your own work (or point me at a header in <code>./reference/</code>) and we'll score its depth together, out loud, until the judgment feels automatic.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 4 (deep vs shallow modules) &amp; ch. 5 (information hiding / leakage).</li>
+      <li id="s2">Semaphore = queue of length 1, item size 0: <code>./reference/FreeRTOS-Kernel/include/semphr.h</code> header comments; and <code>./reference/FreeRTOS-Kernel-Book/ch07.md</code>.</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0001-tactical-vs-strategic.html">← Lesson 1</a>
+    <a href="0003-a-documented-decision.html">Lesson 3 — Reading a Design Decision →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'A <code>strlen</code>-style call: one pointer in, a length out, and it scans the whole string for you. Deep or shallow?',
+      options: [
+        'Deep — tiny interface hides real work',
+        'Weak — the interface is far too big'
+      ],
+      answer: 0,
+      why: 'One parameter buys a full scan with the buffer walk hidden. Small door, useful room: a deep (if small) module.'
+    },
+    {
+      q: 'A <code>PrivateList</code> class exposing <code>getFirst / getNext / insert / remove / getCount</code> that just forwards each call to a std list. Deep or shallow?',
+      options: [
+        'Deep — it neatly wraps the container',
+        'Thin — big interface, no hidden work'
+      ],
+      answer: 1,
+      why: 'The interface is as large as the thing it wraps and hides no decision. Pure pass-through — the textbook shallow module (Ousterhout uses almost this example).'
+    },
+    {
+      q: 'FreeRTOS reuses one queue implementation for queues, semaphores, and mutexes. What does that reuse most directly demonstrate?',
+      options: [
+        'That the queue module is unusually deep',
+        'That the queue interface is far too big'
+      ],
+      answer: 0,
+      why: 'Only a deep module — one that hides enough real machinery — is worth building several interfaces on top of. Depth is what makes reuse pay.'
+    },
+    {
+      q: 'A reviewer says the deep/shallow test is useless because it has no units. Best reply?',
+      options: [
+        'Concede it; without a metric the lens cannot guide a review',
+        'It is a question, not a metric — it forces a specific answer',
+        'Insist depth is fully measurable by counting interface tokens'
+      ],
+      answer: 1,
+      why: 'Its value is not a number but a sharp question — how much must a caller know versus how much do they get? That turns \u201cfeels wrong\u201d into something the other reviewer now has to answer, which is what wins the argument.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 10 — Better Together or Apart?</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 10 <span class="sep">/</span> ~13 min <span class="sep">/</span> Module B</p>
+  <h1>Split by the secret, not by the size</h1>
+  <p class="lede">The last question of Module B is the one reviewers get most confidently wrong: should this be one module or two? The naive answer reads line counts. The strategic answer reads <em>coupling</em> — and it will tell you to keep a 9,000-line file whole and to split a 300-line one.</p>
+
+  <p class="mission"><b>Why this lesson:</b> "This file is too big, split it up" is the single most common cosmetic review comment — and LLMs oblige instantly, carving one cohesive module into three that now share a secret across their new seams. You end up with more files, more interface, and <em>worse</em> coupling. This lesson gives you the real decision rule so you can defend a big module that deserves to stay whole, and demand a split that actually reduces coupling.</p>
+
+  <h2>The idea: join what shares information, separate what doesn't</h2>
+  <p>Ousterhout Ch. 9: bring two pieces of code <strong>together</strong> when they share information, are always used together, overlap conceptually, or are hard to understand in isolation; keep them <strong>apart</strong> when the boundary between them can be narrow.<sup class="cite"><a href="#s1">1</a></sup> The deciding variable is never length — it's how much has to cross the line. A boundary is only worth drawing where the traffic across it is <em>thin</em>. Draw one through the middle of a shared secret and you haven't made two modules; you've made one module with a wound running through it.</p>
+
+  <p><strong>What this does <em>not</em> claim.</strong> It is not "big files are good" or "never split" — it's that <em>coupling</em>, not line count, decides the boundary. A large module can be perfectly correct (<code>tasks.c</code>) <em>and</em> still have real, unrelated costs — merge contention, slower navigation, longer compiles — which the rule doesn't deny; it just says those costs are the wrong reason to cut <em>through a secret</em>. And the rule cuts both ways: it demands you <em>split</em> when a genuinely narrow seam is hiding inside a big file. The claim is about <em>where</em> the line goes (along thin seams, never through shared state), not about how many files you end up with.</p>
+  <div class="compare">
+    <div class="col-good">
+      <h4><span class="chip deep">apart</span> when</h4>
+      <p>The two sides share almost nothing. They meet through a handful of functions with a stable, published signature. The secret each keeps stays on its own side. A narrow line — worth drawing.</p>
+    </div>
+    <div class="col-bad">
+      <h4><span class="chip shallow">apart</span> wrongly</h4>
+      <p>You split by size or "cleanliness". Now a shared data structure straddles the seam; both sides know its layout; every change touches both. A wide, leaky line — the split made things worse.</p>
+    </div>
+  </div>
+
+  <h2>Specimen: one enormous file, and one deliberately separate one</h2>
+  <p>The kernel's own layout is the argument. Look at the two biggest source files:</p>
+  <pre><code>tasks.c    8918 lines   <span class="cmt">// scheduler + TCB + ready/delayed lists + state machine</span>
+queue.c    3391 lines   <span class="cmt">// queues/semaphores/mutexes: the ring buffer + blocking</span></code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/ — line counts via wc -l</p>
+
+  <h3>Why <code>tasks.c</code> is <em>correctly</em> monolithic</h3>
+  <p>The scheduler, the task-state machine, the ready and delayed lists, and the <code>TCB_t</code> structure itself are one tightly-woven secret. The context switcher reads the ready lists; the delay logic edits the same lists; every path mutates TCB fields directly. Crucially, <strong>the definition of <code>TCB_t</code> lives inside <code>tasks.c</code> and appears in no public header</strong> — outside the file a task is only an opaque handle:</p>
+  <pre><code><span class="cmt">/* task.h — the outside world gets a handle, never the struct */</span>
+<span class="kw">typedef</span> <span class="kw">struct</span> tskTaskControlBlock * TaskHandle_t;</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/task.h — line 99 (the full <code>TCB_t</code> is defined only in tasks.c)</p>
+  <p>Splitting "the scheduler" from "task creation" from "the delayed-list logic" into separate files would force <code>TCB_t</code>'s layout to become shared across those seams — the secret would leak out of exactly the one place that's allowed to know it. The pieces are <em>hard to understand apart</em> and they <em>share information</em> constantly: by Ch. 9, they belong together. The size is a <em>consequence</em> of correct grouping, not a defect.</p>
+
+  <h3>Why <code>queue.c</code> is <em>correctly</em> separate</h3>
+  <p>A queue keeps a completely different secret — a ring buffer, its head/tail pointers, its item copies. It needs tasks for only one thing: to <em>block</em> a caller when the queue is full/empty and wake it later. And it gets that through a deliberately <strong>narrow published interface</strong> — a handful of functions, and it never once touches a TCB's fields:</p>
+  <pre><code><span class="cmt">/* the entire vocabulary queue.c uses to speak to tasks.c */</span>
+vTaskPlaceOnEventList( ... );        <span class="cmt">// "park this caller until I signal"</span>
+xTaskRemoveFromEventList( ... );     <span class="cmt">// "wake the highest-priority waiter"</span>
+vTaskMissedYield();  xTaskCheckForTimeOut( ... );  xTaskGetSchedulerState();</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/queue.c — ~8 distinct <code>...Task...</code> functions; no access to <code>TCB_t</code> internals</p>
+  <div class="callout key">
+    <span class="label">Verdict</span>
+    Same codebase, opposite decisions, one rule. <code>tasks.c</code> stays whole because its parts share the <code>TCB_t</code> secret and reading them apart would be harder <em>and</em> would leak that secret. <code>queue.c</code> stands apart because it shares almost nothing with tasks — the boundary between them is a thin, published set of ~8 functions across which no structure layout ever travels. The decision was made on <strong>width of the seam</strong>, and line count fell out afterward. That thin line is also, in <a href="0006-coupling-and-connascence.html">connascence</a> terms, the whole point: a narrow interface keeps the strong connascence <em>inside</em> each file and only weak connascence crossing between them.
+  </div>
+
+  <h2>The honest borderline: bigness is a prompt, not a verdict</h2>
+  <p>None of this makes "large file" harmless. A big module is a legitimate <em>prompt</em> to check whether a narrow seam is hiding inside it — sometimes one genuinely is, and Ch. 9 says split it out (that's exactly how <code>timers.c</code>, <code>event_groups.c</code>, and <code>stream_buffer.c</code> each earned their own file: each keeps its own secret and talks to the kernel through a thin interface). The error is treating size as the <em>verdict</em> instead of the <em>prompt</em>. You still have to look for the thin line before you cut. If the only line available runs through a shared structure, there is no good split — and the right move is to leave it whole and make it <em>readable</em> inside instead (naming, comments, internal helpers — Module D).</p>
+
+  <details class="deep"><summary>Deep dive — why the costs of a big file are bounded but the cost of a bad cut isn't</summary>
+  <div class="body">
+    <p>The steelman below is right that a 9,000-line file has real costs — so why does coupling still win the tie? Because the two kinds of cost scale differently. The costs of <em>bigness</em> — merge conflicts, scroll distance, compile time, "where is this defined" — are real but <em>bounded and local</em>: they annoy the people editing that one file, and every one of them has a cheap mitigation that <em>doesn't</em> move the seam. You can carve <code>tasks.c</code> into clearly-named <code>static</code> helpers and <code>#if</code>-fenced sections (it is), split the <em>editing</em> experience with folding and good names (Module D), and speed compiles with other tools. You get modularity <em>within</em> the file without exporting the secret. The cost of a <em>bad cut</em> — splitting through <code>TCB_t</code> — is different in kind: it publishes the layout to a second module, so now every future change to that structure touches both files, forever, and the coupling <em>grows</em> with each new field and each new caller (it's <a href="0004-information-hiding-and-leakage.html">A4</a> leakage with a file boundary bolted on). Bounded-and-fixable versus unbounded-and-compounding: that asymmetry is why you tolerate a big cohesive file and refuse a tidy-looking leaky split. "Big" is an ergonomics problem with local fixes; "leaked" is a design problem that metastasises.</p>
+  </div></details>
+
+  <h2>The strongest case for splitting anyway (steelman)</h2>
+  <p>"Split big files" isn't just laziness — it has serious backing. State it at strength, then synthesise.</p>
+  <div class="callout counter">
+    <span class="label">The case against the big file</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>Single Responsibility Principle.</strong> "Scheduler + task state + lists + creation + delays" is manifestly more than one responsibility. A 9,000-line file violates SRP on its face — that's several reasons to change living in one place.</li>
+      <li><strong>Team-scale friction.</strong> Big files are merge-conflict magnets, slow to navigate, intimidating to newcomers, and serialise work — two people can't comfortably edit different parts without stepping on each other.</li>
+      <li><strong>Testability.</strong> Smaller units with explicit interfaces are easier to test in isolation; a monolith forces you to test everything through the top-level API, which is coarser and slower.</li>
+    </ol>
+  </div>
+  <p><strong>The synthesis.</strong> Every point is real, and every one is about something <em>other than coupling</em> — which is exactly why they don't overturn the rule, they qualify it. SRP (1) is right that <code>tasks.c</code> has many <em>functions</em>, but "single responsibility" at the module level is "one <em>secret</em>, one reason the <em>representation</em> changes," and by that reading the scheduler, state machine, and lists <em>are</em> one responsibility: they all exist to safely mutate <code>TCB_t</code> state. Splitting them gives you files that each have fewer lines but <em>share</em> a reason to change — worse SRP, not better. Points (2) and (3) are genuine costs, and the honest answer is that they're paid down by <em>internal</em> structure and tooling, not by cutting through the secret: name the sections, use static helpers, fold the file, test through the published <code>...Task...</code> seam that already exists. When a sub-part <em>does</em> have its own secret and a thin interface, Ch. 9 agrees — split it (that's <code>timers.c</code>). So the position isn't "never split big files" — it's "let the <em>width of the seam</em> decide, and solve the ergonomics of bigness with Module-D readability, not by leaking a structure across a new boundary."</p>
+  <div class="callout key">
+    <span class="label">Munger inversion — where the rule dies</span>
+    Invert it: the worst split is the one that <em>looks</em> tidy — two neat files — while a shared secret quietly straddles the seam. Now every change touches both sides, the layout is known in two places (leakage), and you cross the boundary constantly. You didn't reduce complexity; you added a border and left the coupling. A split that increases what crosses the line is strictly worse than the big file it replaced. Ask not "is this file big?" but "if I cut here, what has to travel across the cut?"
+  </div>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    A split (or a merge) justified by size, tidiness, or "one class per file" rather than by coupling. The words: <em>"What crosses this proposed boundary? If a shared data structure or invariant does, the split just spreads one secret across two modules — keep them together. If only a few stable calls cross, the split is real; make that interface the published one."</em> Push the model to name the seam's <em>width</em>, never its line count.
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 9 ("Better Together or Better Apart?").</strong> Note his four "bring together" signals (shared info, used together, conceptual overlap, hard-to-understand-apart) and the warning against splitting that creates coupling. Then verify the specimen: in <code>./reference/FreeRTOS-Kernel/</code>, confirm <code>TCB_t</code> is defined only in <code>tasks.c</code>, and grep <code>queue.c</code> for the <code>...Task...</code> calls — that short list <em>is</em> the seam.</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Bring me a "this file is too big, let's split it" proposal (yours or a model's). We'll ignore the line count and do the only test that matters: draw the proposed cut and list everything that would have to cross it. If a secret crosses, we keep it whole; if only a thin interface does, we make that interface real. That triage is the skill — and it closes Module B.</p>
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 9 (better together or apart; bring-together signals; splits that add coupling).</li>
+      <li id="s2">Together: <code>./reference/FreeRTOS-Kernel/tasks.c</code> (8918 lines; <code>TCB_t</code> defined here only) &amp; <code>include/task.h</code> line 99 (opaque <code>TaskHandle_t</code>). Apart: <code>queue.c</code> (3391 lines) reaching tasks via ~8 published functions (<code>vTaskPlaceOnEventList</code>, <code>xTaskRemoveFromEventList</code>, <code>vTaskMissedYield</code>, <code>xTaskCheckForTimeOut</code>, <code>xTaskGetSchedulerState</code>, …), never touching <code>TCB_t</code> fields.</li>
+      <li id="s3">Other earned splits (own secret + thin interface): <code>timers.c</code>, <code>event_groups.c</code>, <code>stream_buffer.c</code>.</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0009-isolate-what-changes.html">← Lesson 9</a>
+    <a href="../reference/glossary.html">Glossary ↗</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'What actually decides whether two pieces of code belong in one module?',
+      options: [
+        'How many lines each of the two pieces would contain apart',
+        'How much information must cross the boundary drawn between them',
+        'Whether the team follows a one-class-per-file naming convention'
+      ],
+      answer: 1,
+      why: 'The seam is worth drawing only where the traffic across it is thin. Shared information across the line means they belong together; line count and file conventions are cosmetic.'
+    },
+    {
+      q: 'Why is <code>tasks.c</code> correctly left as one ~9,000-line file?',
+      options: [
+        'Its parts share the TCB_t secret, so any split would leak it',
+        'Large files always compile faster than many small linked ones',
+        'The scheduler is too fast to be safely divided across two files'
+      ],
+      answer: 0,
+      why: 'Scheduler, state machine, and lists all mutate TCB fields directly, and TCB_t is defined only here. Splitting would force that layout to be shared across seams — leakage. They are hard to understand apart and share information: keep together.'
+    },
+    {
+      q: 'A model splits a cohesive module in two, leaving a shared struct across the seam. Verdict?',
+      options: [
+        'Good — two smaller files are always easier to maintain later',
+        'Fine — as long as each new file stays under the line-count limit',
+        'Worse — a border was added but the coupling was left in place'
+      ],
+      answer: 2,
+      why: 'The layout is now known on both sides (leakage) and every change touches both files. A split that increases what crosses the line is strictly worse than the whole module it replaced.'
+    },
+    {
+      q: 'Someone invokes the Single Responsibility Principle to split <code>tasks.c</code>. Best response?',
+      options: [
+        'Agree; any file with many functions violates SRP and must split',
+        'One secret is one responsibility — these parts share TCB_t state',
+        'Reject SRP entirely; it has no bearing on how modules are drawn'
+      ],
+      answer: 1,
+      why: 'At module level \u201cone responsibility\u201d means one secret / one reason the representation changes. Scheduler, state machine and lists all exist to mutate TCB_t, so they are one responsibility; splitting them makes files that share a reason to change — worse SRP.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 8 — Pull Complexity Downward</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 08 <span class="sep">/</span> ~13 min <span class="sep">/</span> Module B</p>
+  <h1>Someone has to eat the complexity</h1>
+  <p class="lede">Complexity in a system is conserved — it doesn't vanish, it only moves. The one real choice a designer makes is <em>where it lands</em>: inside the module, paid once by its author, or out in the interface, paid forever by every caller. Ousterhout's Ch. 8 gives the default direction, and it's counter-intuitive: pull it <strong>down</strong>.</p>
+
+  <p class="mission"><b>Why this lesson:</b> An LLM optimises for a module that's easy to <em>write</em>, not one that's easy to <em>use</em> — so it reflexively pushes complexity <em>up</em>: extra parameters "for flexibility", config flags, an <code>init()</code> you must remember to call, a mode you must set first. Each one looks harmless in the diff and taxes every future caller. This lesson trains you to see the direction complexity is flowing and to push back: <em>make the module suffer so the caller doesn't.</em></p>
+
+  <h2>The idea: a simple interface beats a simple implementation</h2>
+  <p>Ousterhout's Ch. 8: when you must choose, <strong>it is more important for a module to have a simple interface than a simple implementation</strong>.<sup class="cite"><a href="#s1">1</a></sup> A module is written once and used many times; the interface is paid by everyone, the implementation only by its author. So when there's ugliness to absorb, the module developer should take it on internally — <em>pull complexity downward</em> — rather than exposing it and letting it "become someone else's problem." The tell that you're doing it wrong: a new configuration parameter, or a caller-facing flag, that exists only because handling the case <em>inside</em> the module felt harder.</p>
+
+  <p><strong>What this does <em>not</em> claim.</strong> "Pull down" is a <em>default with conditions</em>, not "hide everything inside." Ousterhout's own three conditions: pull complexity down when it's <em>closely related to the module's existing function</em>, when doing so <em>simplifies many callers</em>, and when it <em>genuinely shrinks the interface</em>. Absorb complexity that fails those — unrelated concerns, a case only one exotic caller hits, ugliness that doesn't actually simplify the interface — and you've just built a kitchen-sink module that's a nightmare inside and no simpler outside. The claim is directional (<em>prefer</em> down), bounded by "and only when it buys a simpler interface for real callers."</p>
+  <div class="compare">
+    <div class="col-good">
+      <h4><span class="chip deep">down</span> good</h4>
+      <p>The mess lives inside the implementation. The interface stays two functions wide. The author suffers once; every caller is spared. Cost is paid at the narrowest point.</p>
+    </div>
+    <div class="col-bad">
+      <h4><span class="chip shallow">up</span> costly</h4>
+      <p>The mess is exported as parameters, flags, ordering rules, "call this first." The author saved an afternoon; every caller pays the tax forever. A <a href="0002-deep-vs-shallow-modules.html">shallow module</a> by construction.</p>
+    </div>
+  </div>
+
+  <h2>Specimen A: five heaps, one door</h2>
+  <p>Dynamic allocation is genuinely hard on an embedded target: fragmentation, coalescing freed blocks, alignment, thread-safety, determinism. FreeRTOS could have surfaced those choices to you. Instead the entire caller-facing interface is two functions, declared once in <code>portable.h</code>:</p>
+  <pre><code><span class="cmt">/* portable.h — the whole public surface of memory management */</span>
+<span class="kw">void</span> * pvPortMalloc( size_t xWantedSize );
+<span class="kw">void</span>   vPortFree( <span class="kw">void</span> * pv );</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/portable.h — lines 189, 192</p>
+  <p>Behind that unchanging door sit <strong>five</strong> complete, swappable implementations in <code>portable/MemMang/</code>, each absorbing a different amount of ugliness so you don't have to:</p>
+  <ul>
+    <li><code>heap_1.c</code> (178 lines) — allocate-only, <em>never frees</em>. Tiny, deterministic, safety-critical friendly.</li>
+    <li><code>heap_2.c</code> (407 lines) — frees, best-fit, but doesn't coalesce. Kept for legacy.</li>
+    <li><code>heap_3.c</code> (106 lines) — a thin, <em>thread-safe wrapper</em> over the compiler's own <code>malloc</code>/<code>free</code>, guarded by suspending the scheduler.</li>
+    <li><code>heap_4.c</code> (638 lines) — best-fit <em>with coalescence</em> of adjacent free blocks, to fight fragmentation. The workhorse.</li>
+    <li><code>heap_5.c</code> (756 lines) — heap_4 plus the ability to span multiple non-contiguous memory regions.</li>
+  </ul>
+  <p>Look at what <code>heap_4</code> quietly does on your behalf — its header states the contract:</p>
+  <pre><code><span class="cmt">/*
+ * A sample implementation of pvPortMalloc() and vPortFree() that combines
+ * (coalescences) adjacent memory blocks as they are freed, and in so doing
+ * limits memory fragmentation.
+ */</span></code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/portable/MemMang/heap_4.c — lines 29–33</p>
+  <div class="callout key">
+    <span class="label">Verdict</span>
+    Coalescence, best-fit search, block-link bookkeeping, alignment, thread-safety — hundreds of lines of it — are pulled <em>down</em> below a two-function interface. You choose your allocator <strong>once</strong>, by linking one <code>.c</code> file, and then never think about it again: your call site is always <code>pvPortMalloc( n )</code>. The complexity didn't disappear; it was moved to the narrowest, cheapest place to pay for it — and made a <a href="../reference/glossary.html">variation seam</a> so a project can trade determinism for anti-fragmentation without touching a single caller.
+  </div>
+
+  <h2>Specimen B: <code>xTaskCreate</code> swallows the stack-growth mess</h2>
+  <p>Creating a task means allocating a TCB and a stack, zeroing them, and laying the stack out correctly — and stacks grow <em>up</em> on some CPUs and <em>down</em> on others. That last detail is exactly the kind of hardware ugliness that tempts a designer to make it the caller's problem. <code>prvCreateTask</code> (the guts of <code>xTaskCreate</code>) refuses, and forks internally instead:</p>
+  <pre><code><span class="cmt">/* tasks.c — the same job, two orderings, decided by the port, hidden from you */</span>
+<span class="kw">#if</span> ( portSTACK_GROWTH &gt; 0 )
+    <span class="cmt">/* stack grows up: TCB first, then stack */</span>
+    pxNewTCB-&gt;pxStack = pvPortMallocStack( uxStackDepth * sizeof( StackType_t ) );
+<span class="kw">#else</span>
+    <span class="cmt">/* stack grows down: stack first, then TCB */</span>
+    pxStack   = pvPortMallocStack( uxStackDepth * sizeof( StackType_t ) );
+    pxNewTCB  = pvPortMalloc( sizeof( TCB_t ) );
+    ( <span class="kw">void</span> ) memset( pxNewTCB, 0x00, sizeof( TCB_t ) );
+<span class="kw">#endif</span></code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/tasks.c — <code>prvCreateTask</code>, <code>portSTACK_GROWTH</code> fork at lines 1643–1710 (abridged)</p>
+  <p>The interface you actually touch stays serene — <code>xTaskCreate( fn, name, stackDepth, param, prio, &amp;handle )</code>. You pass a stack <em>depth</em>, a plain number; the module eats the allocation, the ordering, the zeroing, and the CPU-specific direction. That is complexity pulled downward until the caller sees a flat, obvious call.</p>
+
+  <h2>The honest borderline: when you push complexity <em>up</em> on purpose</h2>
+  <p>"Pull down" is a default, not a commandment — and FreeRTOS itself breaks it, deliberately, with a straight face. Alongside <code>xTaskCreate</code> lives <code>xTaskCreateStatic</code>:</p>
+  <pre><code><span class="cmt">/* task.h — the caller must now supply the memory themselves */</span>
+TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode, ...,
+                                StackType_t  * const puxStackBuffer,
+                                StaticTask_t * const pxTaskBuffer );</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/task.h — lines 523–529 (verified)</p>
+  <p>This shoves real complexity <em>up</em>: now <em>you</em> must declare and own the stack buffer and the TCB buffer and keep them alive for the task's whole life. Why is that not the exact anti-pattern we just condemned? Because an <strong>external force</strong> demands it: safety-critical and MISRA-constrained builds forbid dynamic allocation outright (<code>configSUPPORT_DYNAMIC_ALLOCATION 0</code>). When the heap is off the table, the memory <em>has</em> to come from the caller — the complexity is real and irreducible, not manufactured laziness. Two things make the push-up honest rather than a leak:</p>
+  <ul>
+    <li>It's a <strong>separate, explicitly named interface</strong> (<code>...Static</code>), not extra parameters bolted onto the simple one. The caller opts in, eyes open.</li>
+    <li>It exists only because a genuine constraint (no heap) makes pulling-down <em>impossible</em> — not because absorbing it was merely inconvenient.</li>
+  </ul>
+  <div class="callout key">
+    <span class="label">Munger inversion — know where the rule dies</span>
+    Invert the principle to find its edge: you may push complexity up <strong>only</strong> when (1) the complexity is essential and cannot be hidden without lying, and (2) an outside constraint — not your own convenience — forces the caller to own it. The instant "it was hard to handle inside" is the real reason, you've mislabelled laziness as flexibility. FreeRTOS passes both tests; the LLM's spurious config flag passes neither.
+  </div>
+
+  <details class="deep"><summary>Deep dive — the second-order cost: pulling down <em>concentrates</em> complexity (and hiding can be a lie)</summary>
+  <div class="body">
+    <p>Pulling complexity down doesn't destroy it — it <em>concentrates</em> it in one place, and that has two consequences worth naming. First, the module author now carries the hardest part of the whole system, so the deepest modules demand your <em>best</em> engineering and your most careful review — <code>heap_4.c</code>'s coalescing allocator is 638 lines because it ate fragmentation on everyone's behalf; a bug there is a bug everywhere. Concentration is the right trade (one hard place beats a thousand easy-but-wrong call sites), but it means "deep" and "low-risk" are not synonyms — depth <em>moves</em> risk to where it can at least be reviewed once. Second, the honest limit: hiding is a <em>lie</em> when the thing you hid is something the caller genuinely needed to decide. Bury a heap allocation inside a function called on a real-time deadline and you've hidden a decision ("this can block / can fail / can fragment") that the caller had every right to see — which is exactly why FreeRTOS <em>doesn't</em> hide it under <code>configSUPPORT_DYNAMIC_ALLOCATION 0</code>, and exposes <code>xTaskCreateStatic</code> instead. The test for "is this hiding or lying?" is: <em>would a competent caller be surprised, and harmed, to learn what I hid?</em></p>
+  </div></details>
+
+  <h2>The strongest case against pulling down (steelman)</h2>
+  <p>The opposite instinct — expose the knobs, let the caller decide — has real force. State it well, then synthesise.</p>
+  <div class="callout counter">
+    <span class="label">The case against</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>Absorb-everything modules rot.</strong> Every case you pull inside makes the implementation bigger and more conditional. Push far enough and you get a 5,000-line god-module with twelve internal modes — simple interface, unmaintainable guts. The complexity didn't leave; it metastasised.</li>
+      <li><strong>The author can't know all callers.</strong> A library author who hides a decision robs a caller with different needs of control. Exposing the knob is <em>humility</em> — it admits you can't predict every use, so you let the person who knows their case choose.</li>
+      <li><strong>Hidden complexity is un-tunable.</strong> When performance matters, a caller needs to reach the allocation strategy, the buffer size, the retry policy. A too-simple interface makes the module a black box you can't optimise through.</li>
+    </ol>
+  </div>
+  <p><strong>The synthesis.</strong> Each point marks a real boundary of the rule rather than breaking it. Point (1) is why the rule is <em>conditional</em>: pull down only complexity <em>related to the module's function</em> — an allocator absorbing allocation concerns stays cohesive; an allocator that also grew a logging framework and a config parser is the god-module, and the fix is to split by secret (lesson <a href="0010-better-together-or-apart.html">B10</a>), not to push the allocation back up. Points (2) and (3) are the same true observation — sometimes the caller <em>must</em> decide — and FreeRTOS's answer is the pattern to copy: don't bolt a knob onto the simple interface, offer a <em>separate, honestly-named</em> one (<code>...Static</code>, or the five linkable <code>heap_*.c</code> files). The caller who needs control opts into it, eyes open; the 95% who don't keep <code>pvPortMalloc(n)</code>. So the honest position isn't "hide maximally" — it's "hide the related complexity behind the simplest interface that doesn't <em>lie</em>, and expose genuine caller-decisions as separate opt-in interfaces, never as flags on the easy path."</p>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    A new parameter, flag, mode, or "call <code>init()</code> first" that exists to make the <em>implementation</em> easier, taxing every caller to save the author once. The words: <em>"This pushes complexity onto every caller to keep the module simple inside — the tradeoff runs the wrong way. What forces the caller to own this, versus us absorbing it below the interface?"</em> If the honest answer is "nothing, it was just easier to write this way," pull it back down.
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 8 ("Pull Complexity Downward"),</strong> and note his own caution that pulling down isn't universal — it's right when the complexity is closely related to the module's function, when it simplifies many callers, and when it genuinely shrinks the interface. Then read the top-of-file comments of <code>heap_1.c</code> and <code>heap_4.c</code> in <code>./reference/FreeRTOS-Kernel/portable/MemMang/</code> back to back: same two-function contract, opposite amounts of complexity absorbed.</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Bring me an interface — yours or a model's — and we'll trace which way complexity is flowing across it. For every parameter, flag, and ordering rule we'll ask the one question that decides it: <em>is this here because the caller truly must own it, or because it was easier to write this way?</em> Sorting real constraints from disguised laziness is the skill.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 8 (pull complexity downward; simple interface &gt; simple implementation; and its limits).</li>
+      <li id="s2">One interface, five implementations: <code>./reference/FreeRTOS-Kernel/include/portable.h</code> lines 189/192; <code>portable/MemMang/heap_1.c</code>…<code>heap_5.c</code> (178/407/106/638/756 lines); <code>heap_4.c</code> lines 29–33 (coalescence contract).</li>
+      <li id="s3">Absorbed hardware ugliness &amp; the honest push-up: <code>./reference/FreeRTOS-Kernel/tasks.c</code> <code>prvCreateTask</code> — <code>portSTACK_GROWTH</code> fork at lines 1643–1710; <code>include/task.h</code> lines 523–529 (<code>xTaskCreateStatic</code>).</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0007-different-layer-different-abstraction.html">← Lesson 7</a>
+    <a href="0009-isolate-what-changes.html">Lesson 9 — Isolate What Changes →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'What does "pull complexity downward" actually trade off?',
+      options: [
+        'A harder implementation in exchange for a simpler interface',
+        'A simpler implementation in exchange for a broader interface',
+        'A smaller codebase in exchange for slower runtime behaviour'
+      ],
+      answer: 0,
+      why: 'The module author accepts a messier implementation so that every caller gets a small, simple interface. Interface cost is paid by everyone; implementation cost is paid once. That is the trade.'
+    },
+    {
+      q: 'Five <code>heap_*.c</code> files sit behind one <code>pvPortMalloc</code>/<code>vPortFree</code>. What did that pull down?',
+      options: [
+        'The allocation strategy and fragmentation handling, hidden below',
+        'The choice of allocator, surfaced to each call site as a flag',
+        'The free-block coalescing, reimplemented by callers as needed'
+      ],
+      answer: 0,
+      why: 'Coalescence, best-fit search, alignment and thread-safety live inside the chosen implementation. The caller picks an allocator once by linking a file, then always just writes pvPortMalloc(n).'
+    },
+    {
+      q: 'Why is <code>xTaskCreateStatic</code> pushing memory ownership onto the caller <em>not</em> the anti-pattern?',
+      options: [
+        'Because static memory is faster, so pushing up is the better default',
+        'Because pushing complexity up is fine whenever the code gets simpler',
+        'Because a no-heap constraint forces it, via a separate honest interface'
+      ],
+      answer: 2,
+      why: 'An external constraint (dynamic allocation forbidden) makes the complexity irreducible, and it is exposed through a distinct opt-in interface, not smuggled in as parameters on the simple one. Both tests pass; convenience alone would fail.'
+    },
+    {
+      q: 'A reviewer warns that pulling everything down breeds an unmaintainable god-module. Best answer?',
+      options: [
+        'Concede and push the absorbed complexity back up to the callers',
+        'Pull down only related complexity; split unrelated secrets instead',
+        'Ignore it, since a simple interface always outranks inner clarity'
+      ],
+      answer: 1,
+      why: 'The rule is conditional: absorb complexity tied to the module\u2019s function. Unrelated concerns that bloat the guts should be split by secret (B10), not exposed as knobs — that keeps the interface simple without a kitchen-sink implementation.'
+    }
+  ]
+});
+</script>
+</body>
+</html>

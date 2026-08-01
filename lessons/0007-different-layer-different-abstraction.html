@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lesson 7 — Different Layer, Different Abstraction</title>
+<link rel="stylesheet" href="../assets/course.css">
+<link rel="stylesheet" href="../assets/quiz.css">
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 07 <span class="sep">/</span> ~13 min <span class="sep">/</span> Module B</p>
+  <h1>Each layer should speak a different language</h1>
+  <p class="lede">Module A trained your eye on single modules. Module B is about how they <em>stack</em>. The first test of a healthy stack is brutally simple: as you move from one layer to the next, does the <em>vocabulary</em> actually change? When it doesn't, you've found a layer that isn't earning its keep.</p>
+
+  <p class="mission"><b>Why this lesson:</b> "Clean architecture" is the LLM's favourite alibi for shipping four layers that all say the same thing — a controller calling a service calling a manager calling a repository, each method just relaying the last. Ch. 7 gives you the X-ray to see through it: a real layer boundary is where the <em>abstraction changes</em>. Learn to demand that change, and you can shrink a model's tower of relays to the one layer that was doing work.</p>
+
+  <h2>The idea: adjacent layers, different abstractions</h2>
+  <p>Ousterhout's Ch. 7 rule: in a well-designed system, <strong>each layer provides a different abstraction from the layers above and below it</strong>.<sup class="cite"><a href="#s1">1</a></sup> When two adjacent layers have the <em>same</em> abstraction, that's a red flag — the clearest symptom being the <strong>pass-through method</strong>: a method that does little but call another method with roughly the same signature. It adds interface (cost) without adding functionality (benefit) — a <a href="0002-deep-vs-shallow-modules.html">shallow module</a> wearing a layer's clothes.</p>
+
+  <p><strong>What this does <em>not</em> claim.</strong> It is not "fewer layers are better," nor "indirection is waste," nor "every pass-through is a crime" (Specimen B below is a good one). The scoped claim is about <em>abstraction change across a boundary</em>: a layer earns its place by offering a <em>different</em> vocabulary than its neighbours. A layer that restates its neighbour's abstraction unchanged is the suspect — not because indirection is bad, but because <em>that particular</em> indirection translated nothing. Layers that introduce a real new abstraction (or a real variation seam) are exactly what you want, however many there are.</p>
+  <div class="compare">
+    <div class="col-good">
+      <h4><span class="chip deep">real</span> boundary</h4>
+      <p>Crossing it, the nouns change: "task" becomes "stack frame" becomes "CPU register." Each layer restates the problem in a lower vocabulary. The layer earns its existence.</p>
+    </div>
+    <div class="col-bad">
+      <h4><span class="chip shallow">fake</span> boundary</h4>
+      <p>Crossing it, the nouns are identical: <code>service.save()</code> calls <code>manager.save()</code> calls <code>repo.save()</code>. Nothing was translated. The middle layers are pass-through — pure cost.</p>
+    </div>
+  </div>
+
+  <h2>Specimen A: a real boundary — "task" descends to "register"</h2>
+  <p>Follow one operation down the FreeRTOS stack and watch the language change under you. At the <strong>public API</strong> layer the abstraction is a <em>task</em>:</p>
+  <pre><code>xTaskCreate( vMyTask, "blink", 128, NULL, 2, &amp;handle );  <span class="cmt">/* "make me a task" */</span></code></pre>
+  <p>Inside the <strong>kernel</strong> layer (<code>tasks.c</code>), "task" dissolves into TCBs, stacks, and ready lists — and at one point it must ask a lower layer to lay out a brand-new stack so the task looks like it was already running. It calls:</p>
+  <pre><code><span class="cmt">/* tasks.c — kernel asks the port to build a stack frame */</span>
+pxNewTCB-&gt;pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB-&gt;pxStack,
+                                                pxTaskCode, pvParameters, ... );</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/tasks.c — line 1963; interface in include/portable.h — line ~128</p>
+  <p>Cross into the <strong>port</strong> layer and the abstraction has completely changed — there are no tasks here, only the register-stacking convention of a specific CPU. Here's the Cortex-M3 <code>portYIELD</code>, the whole "ask the scheduler to switch" idea rendered in the machine's own words:</p>
+  <pre><code><span class="cmt">/* portable/GCC/ARM_CM3/portmacro.h — the SAME intent, in hardware vocabulary */</span>
+<span class="kw">#define</span> portYIELD()                                     \
+    {                                                   \
+        <span class="cmt">/* Set a PendSV to request a context switch. */</span> \
+        portNVIC_INT_CTRL_REG = portNVIC_PENDSVSET_BIT; \
+        __asm <span class="kw">volatile</span> ( "dsb" ::: "memory" );       \
+        __asm <span class="kw">volatile</span> ( "isb" );                     \
+    }
+<span class="kw">#define</span> portNVIC_INT_CTRL_REG  ( *( ( <span class="kw">volatile</span> uint32_t * ) 0xe000ed04 ) )</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/portable/GCC/ARM_CM3/portmacro.h — lines 85–96</p>
+  <div class="callout key">
+    <span class="label">Verdict</span>
+    Three layers, three genuinely different vocabularies: <em>task</em> → <em>TCB / stack</em> → <em>PendSV bit at address <code>0xe000ed04</code></em>. That descent — the same operation restated in a lower language at each step — is what a load-bearing layer boundary looks like. It's also <em>why</em> FreeRTOS runs on dozens of chips: only the bottom layer speaks hardware, so only it changes per port. The boundary is a <a href="../reference/glossary.html">seam</a> for variation.
+  </div>
+
+  <h2>Specimen B: the honest borderline (train your judgment, not a rule)</h2>
+  <p>Now the uncomfortable one. In <code>task.h</code>:</p>
+  <pre><code><span class="cmt">/* task.h */</span>
+<span class="kw">#define</span> taskYIELD()            portYIELD()
+<span class="kw">#define</span> taskENTER_CRITICAL()   portENTER_CRITICAL()</code></pre>
+  <p class="filecite">./reference/FreeRTOS-Kernel/include/task.h — lines 227, 241</p>
+  <p>By shape, these are <em>textbook pass-throughs</em>: <code>taskYIELD()</code> calls <code>portYIELD()</code> with the same (empty) signature and adds nothing. A dogmatic reviewer shouts "red flag!" — and a strategic one pauses, because the interesting question isn't <em>"is it a pass-through?"</em> but <em>"what is this thin line buying?"</em> Here it buys a <strong>stable, kernel-facing name at a variation seam</strong>: application and kernel code say <code>taskYIELD</code>, while the thing it forwards to (<code>portYIELD</code>) is swapped out wholesale for every architecture. The relay isn't inventing a fake middle layer; it's a one-line adapter that decouples the stable name from the volatile implementation.</p>
+  <p>That's the judgment to internalise: a pass-through <em>shape</em> is acceptable only when it sits on a real boundary and pins a name that must stay stable while the other side varies. Absent that — a <code>service.save()</code> that only ever calls one <code>repo.save()</code>, no variation, no rename worth having — the same shape is pure waste. Same code shape; opposite verdicts, decided entirely by whether an abstraction (or a variation axis) actually changes across the line.</p>
+
+  <details class="deep"><summary>Deep dive — pass-through <em>variables</em>, and why the macro relay is nearly free while the OO one isn't</summary>
+  <div class="body">
+    <p>Ch. 7 names a second, sneakier symptom: the <strong>pass-through variable</strong> — a parameter threaded down through layers that don't use it, just to reach a layer that does. It couples every layer it passes through to a decision none of them care about, and it's <em>worse</em> than a pass-through method because it's invisible in any single function (you only see it by tracing the whole call chain). The cure is the same as the method's: either give an intermediate layer a way to <em>supply</em> the value (so it stops travelling), or share it through a context object rather than the signature. — Second point worth seeing: <em>why</em> the kernel tolerates <code>#define taskYIELD() portYIELD()</code> so cheaply. It's a macro: at compile time the relay <em>vanishes</em>, so the only cost is one name to learn, and that name buys a portability seam. Contrast a <code>Service→Manager→Repo</code> tower in an OO codebase: each relay is a real method, a real stack frame, a real class to open while debugging, and a real thing the reader must hold in working memory. Same "pass-through" shape, wildly different cost — which is why the reviewer's question is never "is there indirection?" but "what does this indirection <em>translate</em>, and what does it <em>cost</em> to keep?"</p>
+  </div></details>
+
+  <h2>The strongest case for more layers (steelman)</h2>
+  <p>Architecture culture is full of reasons to <em>add</em> the layers Ch. 7 would delete. State the best of them, then synthesise.</p>
+  <div class="callout counter">
+    <span class="label">The case against collapsing</span>
+    <ol style="margin:0.3rem 0 0; padding-left:1.2rem">
+      <li><strong>Layers are test seams.</strong> A service-over-repository split, even with matching signatures, lets you mock the repository and unit-test the service in isolation. The "pass-through" is what makes the code testable.</li>
+      <li><strong>Dependency inversion.</strong> Hexagonal / ports-and-adapters deliberately introduces interfaces whose methods mirror the domain's — so the domain depends on an abstraction, not a concrete DB. That mirroring <em>looks</em> like a pass-through but is the whole point.</li>
+      <li><strong>Today's relay is tomorrow's extension point.</strong> The moment you need caching, retries, or a second implementation, the layer that was "just forwarding" becomes the place it all hangs. Delete it and you'll rebuild it under pressure.</li>
+    </ol>
+  </div>
+  <p><strong>The synthesis.</strong> Notice what every point smuggles in: a <em>reason the layer is not actually a pass-through</em>. A seam you can mock (1), a dependency-inverting port (2), a place caching will live (3) — each is a real <em>abstraction or variation axis</em> the layer introduces, which is precisely what Ch. 7 asks for. So they don't refute the rule; they name the test that passes it. The rule bites only on the layer that offers <em>none</em> of these — no seam anyone mocks, no second implementation, no cross-cutting concern, just <code>get</code> calling <code>get</code>. Point (3) deserves the sharpest answer, because it's the usual alibi: "might need it later" is <a href="0009-isolate-what-changes.html">B9</a>'s speculative-generality trap — add the layer <em>when</em> the second implementation or the caching arrives (it's a cheap refactor then, with a real abstraction to hang on it), not now on spec. Honest position: keep every layer that translates a vocabulary or isolates a variation; collapse the ones whose only defence is a future that hasn't shown up.</p>
+
+  <div class="callout key">
+    <span class="label">Munger inversion — make each layer prove it exists</span>
+    Don't ask "are these layers clean?" — invert it: <em>walk the stack and demand of each layer, "what noun do you introduce that your caller didn't already have?"</em> A real layer answers instantly: task → stack frame → PendSV bit. A fake layer stammers — it says "save," and so did the layer above it. The one that can't name its new abstraction (or the variation it hides) is not a layer, it's a toll booth on every call that crosses it. Find the fake layers by trying, and failing, to name what they translate.
+  </div>
+
+  <div class="callout watch">
+    <span class="label">Red flag to name in reviews</span>
+    A layer whose methods mostly forward to the layer below with unchanged names and signatures, on a boundary where nothing varies. The words: <em>"These layers share one abstraction — the middle one is pass-through. Either it should translate to a genuinely lower-level vocabulary, or it should be deleted and the caller should talk to the layer below directly."</em> Make the model justify each layer by naming the abstraction it introduces; if it can't, collapse it.
+  </div>
+
+  <hr class="rule">
+  <h2>Retrieval check</h2>
+  <div data-quiz></div>
+
+  <div class="primary">
+    <span class="label">Primary source — read this next</span>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 7 ("Different Layer, Different Abstraction"),</strong> especially the sections on pass-through methods and pass-through variables. Then trace the specimen yourself: pick any <code>port*</code> macro in <code>./reference/FreeRTOS-Kernel/portable/GCC/ARM_CM3/portmacro.h</code> and find where the kernel calls it — note how the vocabulary drops a level each time you descend.</p>
+  </div>
+
+  <div class="ask">
+    <b>I'm your teacher — ask me.</b> Show me a layered design — yours, a framework's, or a model's "clean architecture" — and we'll walk each boundary asking one question: <em>what abstraction does this layer add?</em> Any layer that can't answer gets collapsed. Doing that walk out loud is the skill.
+  </div>
+
+  <div class="sources">
+    <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
+    <ol>
+      <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 7 (different layer, different abstraction; pass-through methods &amp; variables).</li>
+      <li id="s2">Layer descent: <code>./reference/FreeRTOS-Kernel/tasks.c</code> line 1963 &amp; <code>include/portable.h</code> ~128 (<code>pxPortInitialiseStack</code>); <code>portable/GCC/ARM_CM3/portmacro.h</code> lines 85–96 (register-level <code>portYIELD</code>); <code>include/task.h</code> lines 227 &amp; 241 (the borderline pass-through macros).</li>
+    </ol>
+  </div>
+
+  <div class="nav">
+    <a href="0006-coupling-and-connascence.html">← Lesson 6</a>
+    <a href="0008-pull-complexity-downward.html">Lesson 8 — Pull Complexity Downward →</a>
+  </div>
+</div>
+
+<script src="../assets/quiz.js"></script>
+<script>
+Quiz.mount({
+  mount: '[data-quiz]',
+  questions: [
+    {
+      q: 'What single test best tells a real layer boundary from a fake one?',
+      options: [
+        'Whether the lower layer contains more lines of code',
+        'Whether the abstraction/vocabulary changes across it',
+        'Whether the two layers live in separate source files'
+      ],
+      answer: 1,
+      why: 'A real boundary restates the problem in a different (usually lower) vocabulary: task \u2192 stack frame \u2192 register. File count and line count are incidental; the change of abstraction is the test.'
+    },
+    {
+      q: 'Why is <code>#define taskYIELD() portYIELD()</code> tolerable despite being a pass-through by shape?',
+      options: [
+        'Because macros are free and cannot count as real coupling',
+        'Because it pins a stable name at a per-architecture variation seam',
+        'Because every public API is required to shadow a port macro'
+      ],
+      answer: 1,
+      why: 'It decouples a stable kernel-facing name from an implementation that is swapped wholesale per port. The pass-through shape earns its place only because a real variation axis crosses that boundary.'
+    },
+    {
+      q: 'A model ships <code>Service.get</code> \u2192 <code>Manager.get</code> \u2192 <code>Repo.get</code>, all identical signatures, no variation. Best review action?',
+      options: [
+        'Keep all three; layering always improves maintainability later',
+        'Collapse the relays; no layer adds a distinct abstraction here',
+        'Rename the methods so each signature looks slightly different'
+      ],
+      answer: 1,
+      why: 'None of the middle layers translates to a new abstraction and nothing varies across the boundaries, so they are pure pass-through cost. Collapse them; renaming to hide the sameness only disguises the smell.'
+    },
+    {
+      q: 'Someone defends a matching-signature layer as a mockable test seam. How should that land?',
+      options: [
+        'Reject it; a pass-through can never be justified after the fact',
+        'Accept it; a real test seam is a distinct abstraction the layer adds',
+        'Ignore it; testability has no bearing on whether a layer earns place'
+      ],
+      answer: 1,
+      why: 'A seam something actually mocks is a genuine abstraction the layer introduces — exactly what Ch.7 wants. The rule only bites the layer with no seam, no second implementation and no concern to host: get calling get.'
+    }
+  ]
+});
+</script>
+</body>
+</html>
