@@ -9,7 +9,7 @@ A self-paced course in **strategic programming judgment**, using the FreeRTOS ke
 - **19 self-contained lessons** with retrieval quizzes, from tactical vs. strategic programming through consistency and obvious code.
 - **A reference shelf** with the glossary, connascence cheat sheet, API review checklist, and pinned FreeRTOS Kernel and Kernel Book snapshots.
 - **Line-numbered source views** so lesson citations open at the exact code they discuss.
-- **A responsive reading experience** with a dark theme that follows your operating system or browser preference.
+- **A responsive reading experience** with a dark theme that follows your operating system or browser preference, plus a light/dark toggle that remembers your choice.
 
 You can read the course online, or clone this repository and open `index.html` locally. The site is plain static HTML, CSS, and JavaScript; no build step is needed to browse it.
 
