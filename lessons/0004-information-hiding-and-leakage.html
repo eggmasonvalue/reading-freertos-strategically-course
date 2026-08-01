@@ -35,14 +35,14 @@
   <p><strong>What this does <em>not</em> claim.</strong> "Hide information" is not "make every field private," not "wrap all data in getters," and not a security property (an opaque handle stops <em>coupling</em>, not an attacker). The precise claim is about <em>design decisions that are likely to change</em>: those belong in exactly one module. Plenty of things are legitimately public — a plain value type, a stable constant, a config struct the caller is <em>meant</em> to fill in (lesson <a href="0008-pull-complexity-downward.html">B8</a>'s <code>xTaskCreateStatic</code> buffers). A public field is a leak only when it exposes a decision callers could then depend on. Hiding the wrong things — or hiding reflexively — is its own cost, which the steelman below makes concrete.</p>
 
   <h2>Specimen: the handle that hides a data structure</h2>
-  <p>Open <code>./reference/FreeRTOS-Kernel/include/queue.h</code>. This is the <em>entire</em> definition of a queue that a caller is ever given:</p>
+  <p>Open <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a>. This is the <em>entire</em> definition of a queue that a caller is ever given:</p>
   <pre><code><span class="cmt">/* queue.h — everything the caller sees of a queue's shape */</span>
 <span class="kw">struct</span> QueueDefinition;   <span class="cmt">/* forward-declared: named, but no body */</span>
 <span class="kw">typedef</span> <span class="kw">struct</span> QueueDefinition * QueueHandle_t;</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/queue.h — lines 50–51</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/queue.h" data-lines="50-51"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=50-51#L50"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a> — lines 50–51</p>
   <p>That first line is an <strong>incomplete type</strong>: the struct is <em>named</em> but its members are not declared here. A caller can hold a <code>QueueHandle_t</code> (a pointer to it), pass it around, and store it — but the compiler will <em>refuse</em> to let them dereference it or touch a field, because from the header's point of view the struct has no fields. The wall isn't a convention or a comment. It's enforced by the type system.</p>
 
-  <p>Now open <code>./reference/FreeRTOS-Kernel/queue.c</code> and look at what that handle actually points to — the body that only the implementation can see (abridged):</p>
+  <p>Now open <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/queue.c</code></a> and look at what that handle actually points to — the body that only the implementation can see (abridged):</p>
   <pre><code><span class="cmt">/* queue.c — the body, visible ONLY inside the implementation */</span>
 <span class="kw">typedef struct</span> QueueDefinition
 {
@@ -61,7 +61,7 @@
        configSUPPORT_STATIC_ALLOCATION, configUSE_QUEUE_SETS,
        configUSE_TRACE_FACILITY ... */</span>
 } xQUEUE;</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/queue.c — lines 103–136</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/queue.c" data-lines="103-136"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=103-136#L103"><code>./reference/FreeRTOS-Kernel/queue.c</code></a> — lines 103–136</p>
 
   <p>Count what just got hidden behind those two header lines. Every one of these is a design decision the caller never learns, never depends on, and never breaks when it changes:</p>
   <ul>
@@ -128,7 +128,7 @@
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 5 (information hiding as the mechanism behind deep modules).</li>
-      <li id="s2">Leakage &amp; the incomplete-type wall: <code>./reference/FreeRTOS-Kernel/include/queue.h</code> lines 50–51 (handle) vs <code>./reference/FreeRTOS-Kernel/queue.c</code> lines 103–136 (hidden struct body).</li>
+      <li id="s2">Leakage &amp; the incomplete-type wall: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a> lines 50–51 (handle) vs <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/queue.c</code></a> lines 103–136 (hidden struct body).</li>
     </ol>
   </div>
 

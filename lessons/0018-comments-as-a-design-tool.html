@@ -30,7 +30,7 @@
  * memory. ... If a task is created using xTaskCreate() then both blocks of
  * memory are automatically dynamically allocated ...
  */</span></code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/task.h — comment block above line 396 (verified)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/task.h" data-lines="301-394"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/task.h.html?lines=301-394#L301"><code>./reference/FreeRTOS-Kernel/include/task.h</code></a> — comment block, lines 301–394</p>
   <div class="callout key">
     <span class="label">Why this comment earns its keep</span>
     It states the <em>abstraction</em> ("create a task, make it ready to run") in one line — which the signature alone doesn't say — then tells the caller a fact they genuinely need but <em>cannot</em> see in the type: this variant <strong>dynamically allocates</strong> two blocks of memory. That one sentence is why a caller can choose between <code>xTaskCreate</code> (heap) and <code>xTaskCreateStatic</code> (their buffer) <em>without reading either body</em> — the exact allocation tradeoff from <a href="0012-opaque-handles-and-incomplete-types.html">C12</a>. The comment does what the type couldn't: it carries the part of the contract C can't express.

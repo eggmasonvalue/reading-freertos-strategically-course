@@ -23,7 +23,7 @@
   <p>Note what this deliberately does <em>not</em> say. It does not say types catch most bugs (they don't — see the steelman below). It does not say a program is correct because it type-checks. It says: if you have ten minutes and must spend them on one surface, the signatures are where the marginal minute buys the most. Hold that scope; the whole lesson defends <em>that</em> sentence and nothing larger.</p>
 
   <h2>Specimen: a reviewer's line-by-line read</h2>
-  <p>Open <code>./reference/FreeRTOS-Kernel/include/task.h</code>. Two declarations — the handle (line 99) and the constructor (lines 396–401):</p>
+  <p>Open <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/task.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/task.h</code></a>. Two declarations — the handle (lines 98–100) and the constructor (lines 395–402):</p>
   <pre><code><span class="kw">typedef struct</span> tskTaskControlBlock * TaskHandle_t;
 
 BaseType_t xTaskCreate( TaskFunction_t          pxTaskCode,
@@ -32,7 +32,7 @@ BaseType_t xTaskCreate( TaskFunction_t          pxTaskCode,
                         <span class="kw">void</span> * <span class="kw">const</span>              pvParameters,
                         UBaseType_t             uxPriority,
                         TaskHandle_t *          <span class="kw">const</span> pxCreatedTask );</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/task.h — lines 99 &amp; 396–401 (verified)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/task.h" data-lines="98-100,395-402"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/task.h.html?lines=98-100,395-402#L98"><code>./reference/FreeRTOS-Kernel/include/task.h</code></a> — lines 98–100 and 395–402</p>
   <p>Now read it the way a strategic reviewer does — <em>every token is a decision you can interrogate</em>:</p>
   <ul>
     <li><code>TaskHandle_t</code> is a pointer to a <em>struct you were never given the definition of</em> (lesson <a href="0012-opaque-handles-and-incomplete-types.html">C12</a>). Design decision, visible in the type: <em>the task's internals are hidden and you may not touch them.</em></li>
@@ -115,7 +115,7 @@ BaseType_t xTaskCreate( TaskFunction_t          pxTaskCode,
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 4–5 (interface = everything a developer must know to use a module; deep modules hide decisions behind small interfaces).</li>
-      <li id="s2">Specimen (verified): <code>./reference/FreeRTOS-Kernel/include/task.h</code> — <code>TaskHandle_t</code> typedef (line 99) and <code>xTaskCreate</code> signature (lines 396–401).</li>
+      <li id="s2">Specimen: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/task.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/task.h</code></a> — <code>TaskHandle_t</code> typedef (lines 98–100) and <code>xTaskCreate</code> signature (lines 395–402).</li>
       <li id="s3">Hyrum's Law (Hyrum Wright): with enough users, every observable behavior of an interface becomes depended upon. Cited as the honest limit on "durable."</li>
     </ol>
   </div>

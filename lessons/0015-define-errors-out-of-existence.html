@@ -34,7 +34,8 @@ BaseType_t xQueueReceive( QueueHandle_t xQueue, <span class="kw">void</span> * p
 <span class="cmt">/* CANNOT fail — the void return IS the promise */</span>
 <span class="kw">void</span> vTaskDelay( <span class="kw">const</span> TickType_t xTicksToDelay );   <span class="cmt">/* delaying always "succeeds" */</span>
 <span class="kw">void</span> vTaskDelete( TaskHandle_t xTaskToDelete );      <span class="cmt">/* deleting is defined to just work */</span></code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/queue.h:913 · include/task.h:894, 840 (verified)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/queue.h" data-lines="913-915"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=913-915#L913"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a> — lines 913–915</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/task.h" data-lines="840,894"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/task.h.html?lines=840,894#L840"><code>./reference/FreeRTOS-Kernel/include/task.h</code></a> — lines 840, 894</p>
   <div class="callout key">
     <span class="label">Read the leverage</span>
     <code>xQueueReceive</code> returns <code>BaseType_t</code> because a timeout is a <em>real, expected</em> outcome the caller must branch on — that error genuinely exists, so the type surfaces it. But <code>vTaskDelay</code> returns <code>void</code>: the designers arranged the semantics so there is <em>nothing to fail</em>. The absence of a return value is not laziness — it's a <strong>promise</strong>, and it deletes a branch from every one of the thousands of call sites. Multiply that: the API's error surface shrank by design, and with it the state space every caller (and every test, and every LLM) must cover.

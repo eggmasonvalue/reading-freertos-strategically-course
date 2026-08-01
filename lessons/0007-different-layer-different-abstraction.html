@@ -31,14 +31,15 @@
   </div>
 
   <h2>Specimen A: a real boundary — "task" descends to "register"</h2>
-  <p>Follow one operation down the FreeRTOS stack and watch the language change under you. At the <strong>public API</strong> layer the abstraction is a <em>task</em>:</p>
+  <p>Follow two related layer descents in the FreeRTOS stack and watch the language change under you. In the first, the <strong>public API</strong> layer speaks in terms of a <em>task</em>:</p>
   <pre><code>xTaskCreate( vMyTask, "blink", 128, NULL, 2, &amp;handle );  <span class="cmt">/* "make me a task" */</span></code></pre>
   <p>Inside the <strong>kernel</strong> layer (<code>tasks.c</code>), "task" dissolves into TCBs, stacks, and ready lists — and at one point it must ask a lower layer to lay out a brand-new stack so the task looks like it was already running. It calls:</p>
   <pre><code><span class="cmt">/* tasks.c — kernel asks the port to build a stack frame */</span>
 pxNewTCB-&gt;pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB-&gt;pxStack,
                                                 pxTaskCode, pvParameters, ... );</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/tasks.c — line 1963; interface in include/portable.h — line ~128</p>
-  <p>Cross into the <strong>port</strong> layer and the abstraction has completely changed — there are no tasks here, only the register-stacking convention of a specific CPU. Here's the Cortex-M3 <code>portYIELD</code>, the whole "ask the scheduler to switch" idea rendered in the machine's own words:</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/tasks.c" data-lines="1950-1963"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=1950-1963#L1950"><code>./reference/FreeRTOS-Kernel/tasks.c</code></a> — lines 1950–1963</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/portable.h" data-lines="121-127"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/portable.h.html?lines=121-127#L121"><code>./reference/FreeRTOS-Kernel/include/portable.h</code></a> — lines 121–127</p>
+  <p>That is one descent: the kernel asks the port to construct a stack frame. A second descent starts at the stable kernel-facing <code>taskYIELD</code> name and crosses into the <strong>port</strong> layer. There the abstraction has completely changed — no tasks, only the register-level convention for requesting a context switch. Here's the Cortex-M3 <code>portYIELD</code> rendered in the machine's own words:</p>
   <pre><code><span class="cmt">/* portable/GCC/ARM_CM3/portmacro.h — the SAME intent, in hardware vocabulary */</span>
 <span class="kw">#define</span> portYIELD()                                     \
     {                                                   \
@@ -48,10 +49,10 @@ pxNewTCB-&gt;pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB-&gt;px
         __asm <span class="kw">volatile</span> ( "isb" );                     \
     }
 <span class="kw">#define</span> portNVIC_INT_CTRL_REG  ( *( ( <span class="kw">volatile</span> uint32_t * ) 0xe000ed04 ) )</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/portable/GCC/ARM_CM3/portmacro.h — lines 85–96</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/portable/GCC/ARM_CM3/portmacro.h" data-lines="85-96"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/portable/GCC/ARM_CM3/portmacro.h.html?lines=85-96#L85"><code>./reference/FreeRTOS-Kernel/portable/GCC/ARM_CM3/portmacro.h</code></a> — lines 85–96</p>
   <div class="callout key">
     <span class="label">Verdict</span>
-    Three layers, three genuinely different vocabularies: <em>task</em> → <em>TCB / stack</em> → <em>PendSV bit at address <code>0xe000ed04</code></em>. That descent — the same operation restated in a lower language at each step — is what a load-bearing layer boundary looks like. It's also <em>why</em> FreeRTOS runs on dozens of chips: only the bottom layer speaks hardware, so only it changes per port. The boundary is a <a href="../reference/glossary.html">seam</a> for variation.
+    Two descents, three vocabularies: <em>task</em> → <em>TCB / stack</em> for task creation, and <em>taskYIELD</em> → <em>PendSV bit at address <code>0xe000ed04</code></em> for a context-switch request. Each boundary restates a stable kernel intent in the lower layer's language. That is what a load-bearing layer boundary looks like — and why FreeRTOS runs on dozens of chips: only the bottom layer speaks hardware, so only it changes per port. The boundary is a <a href="../reference/glossary.html">seam</a> for variation.
   </div>
 
   <h2>Specimen B: the honest borderline (train your judgment, not a rule)</h2>
@@ -59,7 +60,7 @@ pxNewTCB-&gt;pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB-&gt;px
   <pre><code><span class="cmt">/* task.h */</span>
 <span class="kw">#define</span> taskYIELD()            portYIELD()
 <span class="kw">#define</span> taskENTER_CRITICAL()   portENTER_CRITICAL()</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/task.h — lines 227, 241</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/task.h" data-lines="227,241"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/task.h.html?lines=227,241#L227"><code>./reference/FreeRTOS-Kernel/include/task.h</code></a> — lines 227, 241</p>
   <p>By shape, these are <em>textbook pass-throughs</em>: <code>taskYIELD()</code> calls <code>portYIELD()</code> with the same (empty) signature and adds nothing. A dogmatic reviewer shouts "red flag!" — and a strategic one pauses, because the interesting question isn't <em>"is it a pass-through?"</em> but <em>"what is this thin line buying?"</em> Here it buys a <strong>stable, kernel-facing name at a variation seam</strong>: application and kernel code say <code>taskYIELD</code>, while the thing it forwards to (<code>portYIELD</code>) is swapped out wholesale for every architecture. The relay isn't inventing a fake middle layer; it's a one-line adapter that decouples the stable name from the volatile implementation.</p>
   <p>That's the judgment to internalise: a pass-through <em>shape</em> is acceptable only when it sits on a real boundary and pins a name that must stay stable while the other side varies. Absent that — a <code>service.save()</code> that only ever calls one <code>repo.save()</code>, no variation, no rename worth having — the same shape is pure waste. Same code shape; opposite verdicts, decided entirely by whether an abstraction (or a variation axis) actually changes across the line.</p>
 
@@ -96,7 +97,7 @@ pxNewTCB-&gt;pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB-&gt;px
 
   <div class="primary">
     <span class="label">Primary source — read this next</span>
-    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 7 ("Different Layer, Different Abstraction"),</strong> especially the sections on pass-through methods and pass-through variables. Then trace the specimen yourself: pick any <code>port*</code> macro in <code>./reference/FreeRTOS-Kernel/portable/GCC/ARM_CM3/portmacro.h</code> and find where the kernel calls it — note how the vocabulary drops a level each time you descend.</p>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 7 ("Different Layer, Different Abstraction"),</strong> especially the sections on pass-through methods and pass-through variables. Then trace the specimen yourself: pick any <code>port*</code> macro in <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/portable/GCC/ARM_CM3/portmacro.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/portable/GCC/ARM_CM3/portmacro.h</code></a> and find where the kernel calls it — note how the vocabulary drops a level each time you descend.</p>
   </div>
 
   <div class="ask">
@@ -107,7 +108,7 @@ pxNewTCB-&gt;pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB-&gt;px
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 7 (different layer, different abstraction; pass-through methods &amp; variables).</li>
-      <li id="s2">Layer descent: <code>./reference/FreeRTOS-Kernel/tasks.c</code> line 1963 &amp; <code>include/portable.h</code> ~128 (<code>pxPortInitialiseStack</code>); <code>portable/GCC/ARM_CM3/portmacro.h</code> lines 85–96 (register-level <code>portYIELD</code>); <code>include/task.h</code> lines 227 &amp; 241 (the borderline pass-through macros).</li>
+      <li id="s2">Layer descents: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/tasks.c</code></a> lines 1950–1963 and <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/portable.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/portable.h</code></a> lines 121–127 (<code>pxPortInitialiseStack</code>); <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/portable/GCC/ARM_CM3/portmacro.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/portable/GCC/ARM_CM3/portmacro.h</code></a> lines 85–96 (register-level <code>portYIELD</code>); <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/task.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/task.h</code></a> lines 227 and 241 (the borderline pass-through macros).</li>
     </ol>
   </div>
 

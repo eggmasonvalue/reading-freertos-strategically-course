@@ -37,7 +37,7 @@ BaseType_t xQueueGenericReset( QueueHandle_t xQueue, ... )
 }
 <span class="cmt">/* xQueueSemaphoreTake — encodes "this must be a semaphore, not a data queue" */</span>
 configASSERT( pxQueue-&gt;uxItemSize == 0 );         <span class="cmt">/* line 1355 */</span></code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/queue.c — lines 311, 1355 (counts verified by grep)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/queue.c" data-lines="311,1355"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=311,1355#L311"><code>./reference/FreeRTOS-Kernel/queue.c</code></a> — lines 311, 1355</p>
   <p>Read what each one <em>is</em>: a machine-checked sentence of the spec, placed exactly where it's owed. "You may not pass me NULL." "You may not use this semaphore handle as a data queue." These are precisely the promises C11's type couldn't encode and C13's alias couldn't enforce — now stated as code that fires the instant a caller lies. Line 1355 is the literal runtime backstop for the C13 hole: the compile-time wall was traded away, and <em>this</em> assert is where the guarantee was moved to.</p>
 
   <div class="callout key">

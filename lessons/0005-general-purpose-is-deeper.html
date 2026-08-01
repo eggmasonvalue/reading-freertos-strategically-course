@@ -29,14 +29,14 @@
   </div>
 
   <h2>Specimen: the list that doesn't know what it holds</h2>
-  <p>Open <code>./reference/FreeRTOS-Kernel/list.c</code>. The <em>entire</em> public engine is five functions:</p>
+  <p>Open <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/list.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/list.c</code></a>. The <em>entire</em> public engine is five functions:</p>
   <pre><code><span class="cmt">/* list.c — the whole API. Nothing here mentions "task". */</span>
 <span class="kw">void</span>        vListInitialise( List_t * pxList );
 <span class="kw">void</span>        vListInitialiseItem( ListItem_t * pxItem );
 <span class="kw">void</span>        vListInsertEnd( List_t * pxList, ListItem_t * pxNew );  <span class="cmt">/* O(1) at index    */</span>
 <span class="kw">void</span>        vListInsert( List_t * pxList, ListItem_t * pxNew );     <span class="cmt">/* sorted by value  */</span>
 UBaseType_t uxListRemove( ListItem_t * pxItemToRemove );</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/list.c — lines 49, 89, 105, 139, 217 (verified)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/list.c" data-lines="49,89,105,139,217"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/list.c.html?lines=49,89,105,139,217#L49"><code>./reference/FreeRTOS-Kernel/list.c</code></a> — lines 49, 89, 105, 139, 217</p>
   <p>What makes it general is <em>two fields</em> on the list item, and a discipline of not looking too hard at either:</p>
   <pre><code><span class="cmt">/* list.h — the two hinges of generality */</span>
 <span class="kw">struct</span> xLIST_ITEM {
@@ -46,16 +46,16 @@ UBaseType_t uxListRemove( ListItem_t * pxItemToRemove );</code></pre>
     <span class="kw">void</span> * pvOwner;            <span class="cmt">/* back-pointer to whatever owns this item.
                                 A void*. The list never dereferences it. */</span>
 };</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/list.h — lines 144–152</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/list.h" data-lines="144-152"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/list.h.html?lines=144-152#L144"><code>./reference/FreeRTOS-Kernel/include/list.h</code></a> — lines 144–152</p>
 
   <p>That's the whole trick. The list orders items by a <code>TickType_t</code> number and carries a <code>void *</code> back to the owner. It has no idea whether the number is a time, a priority, or a lottery ticket — and no idea that the owner is a task. Now watch <code>tasks.c</code> feed that <em>same field</em> two completely different meanings:</p>
   <pre><code><span class="cmt">/* tasks.c — a delayed task: the sort key is a WAKE-UP TIME */</span>
-listSET_LIST_ITEM_VALUE( &amp;( pxCurrentTCB-&gt;xStateListItem ), xTimeToWake );   <span class="cmt">// line 8683</span>
+listSET_LIST_ITEM_VALUE( &amp;( pxCurrentTCB-&gt;xStateListItem ), xTimeToWake );   <span class="cmt">// lines 8682–8683</span>
 
 <span class="cmt">/* tasks.c — a task waiting on an event: the sort key is (inverted) PRIORITY */</span>
 listSET_LIST_ITEM_VALUE( &amp;( pxTCB-&gt;xEventListItem ),
-                         configMAX_PRIORITIES - pxTCB-&gt;uxPriority );          <span class="cmt">// line 2927</span></code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/tasks.c — lines 8683 (wake-time) &amp; 2927 (priority)</p>
+                         configMAX_PRIORITIES - uxNewPriority );                <span class="cmt">// lines 2923–2927</span></code></pre>
+  <p class="filecite" data-source="FreeRTOS-Kernel/tasks.c" data-lines="8682-8683,2923-2927"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=8682-8683,2923-2927#L8682"><code>./reference/FreeRTOS-Kernel/tasks.c</code></a> — lines 8682–8683 (wake-time) and 2923–2927 (priority)</p>
   <p>Same field, same insert function, opposite semantics — and the list module is untouched, because it was never told the meaning in the first place. On that one general engine the kernel builds, at last count: the <strong>ready lists</strong> (one per priority), <strong>two delayed lists</strong> (current + overflow), the <strong>pending-ready</strong>, <strong>suspended</strong>, and <strong>waiting-termination</strong> lists — plus, from Lesson 4, every queue's <strong>tasks-waiting-to-send/receive</strong>. One implementation; a dozen jobs.</p>
 
   <div class="callout key">
@@ -118,8 +118,8 @@ listSET_LIST_ITEM_VALUE( &amp;( pxTCB-&gt;xEventListItem ),
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 6 (general-purpose modules are deeper).</li>
-      <li id="s2">The general engine &amp; its two hinges: <code>./reference/FreeRTOS-Kernel/list.c</code> (5-function API) and <code>include/list.h</code> lines 144–152 (<code>xItemValue</code>, <code>pvOwner</code>).</li>
-      <li id="s3">Same field, two meanings: <code>./reference/FreeRTOS-Kernel/tasks.c</code> line 8683 (wake-time) vs line 2927 (inverted priority).</li>
+      <li id="s2">The general engine &amp; its two hinges: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/list.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/list.c</code></a> (5-function API) and <code>include/list.h</code> lines 144–152 (<code>xItemValue</code>, <code>pvOwner</code>).</li>
+      <li id="s3">Same field, two meanings: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/tasks.c</code></a> line 8683 (wake-time) vs line 2927 (inverted priority).</li>
     </ol>
   </div>
 

@@ -19,7 +19,7 @@
   <p>Ousterhout's rule: if code isn't <strong>obvious</strong>, that is a defect — the cost is paid by every future reader.<sup class="cite"><a href="#s1">1</a></sup> But some decisions <em>cannot</em> be made obvious from the code alone, because the important information is the reasoning that was <em>rejected</em>. For those, the strategic move is to write the reasoning down where the reader will stand.</p>
 
   <h2>Specimen: the <code>volatile</code> that isn't there</h2>
-  <p>Open <code>./reference/FreeRTOS-Kernel/include/list.h</code>. The list structures are modified from inside interrupts. Any embedded developer's reflex is: <em>those members must be <code>volatile</code>.</em> They aren't. A tactical reader assumes a bug. Instead, they find this (abridged):</p>
+  <p>Open <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/list.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/list.h</code></a>. The list structures are modified from inside interrupts. Any embedded developer's reflex is: <em>those members must be <code>volatile</code>.</em> They aren't. A tactical reader assumes a bug. Instead, they find this (abridged):</p>
   <pre><code><span class="cmt">/*
  * The list structure members are modified from within interrupts, and
  * therefore by rights should be declared volatile. However, they are only
@@ -36,7 +36,7 @@
 <span class="kw">#ifndef</span> configLIST_VOLATILE
     <span class="kw">#define</span> configLIST_VOLATILE   <span class="cmt">/* expands to nothing */</span>
 <span class="kw">#endif</span></code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/list.h — lines 67–95</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/list.h" data-lines="65-95"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/list.h.html?lines=65-95#L65"><code>./reference/FreeRTOS-Kernel/include/list.h</code></a> — lines 65–95</p>
 
   <p>Read what this comment is <em>made of</em>. It's not describing the code; it's defending a decision. Four moves, every one strategic:</p>
   <ul>
@@ -89,7 +89,7 @@
 
   <div class="primary">
     <span class="label">Primary source — read this next</span>
-    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 13 ("Comments Should Describe Things That Aren't Obvious From the Code") and Ch. 18 ("Code Should Be Obvious").</strong> Then re-read the full <code>configLIST_VOLATILE</code> block in <code>./reference/FreeRTOS-Kernel/include/list.h</code> with these chapters in mind — it's a worked example of both.</p>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 13 ("Comments Should Describe Things That Aren't Obvious From the Code") and Ch. 18 ("Code Should Be Obvious").</strong> Then re-read the full <code>configLIST_VOLATILE</code> block in <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/list.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/list.h</code></a> with these chapters in mind — it's a worked example of both.</p>
   </div>
 
   <div class="ask">
@@ -100,7 +100,7 @@
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 13 &amp; 18 (comments capture non-obvious rationale; code should be obvious).</li>
-      <li id="s2">The decision itself: <code>./reference/FreeRTOS-Kernel/include/list.h</code>, <code>configLIST_VOLATILE</code> comment block (lines 67–95).</li>
+      <li id="s2">The decision itself: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/list.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/list.h</code></a>, <code>configLIST_VOLATILE</code> comment block (lines 65–95).</li>
     </ol>
   </div>
 

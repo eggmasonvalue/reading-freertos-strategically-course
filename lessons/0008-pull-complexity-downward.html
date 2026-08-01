@@ -35,7 +35,7 @@
   <pre><code><span class="cmt">/* portable.h — the whole public surface of memory management */</span>
 <span class="kw">void</span> * pvPortMalloc( size_t xWantedSize );
 <span class="kw">void</span>   vPortFree( <span class="kw">void</span> * pv );</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/portable.h — lines 189, 192</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/portable.h" data-lines="189,192"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/portable.h.html?lines=189,192#L189"><code>./reference/FreeRTOS-Kernel/include/portable.h</code></a> — lines 189, 192</p>
   <p>Behind that unchanging door sit <strong>five</strong> complete, swappable implementations in <code>portable/MemMang/</code>, each absorbing a different amount of ugliness so you don't have to:</p>
   <ul>
     <li><code>heap_1.c</code> (178 lines) — allocate-only, <em>never frees</em>. Tiny, deterministic, safety-critical friendly.</li>
@@ -50,7 +50,7 @@
  * (coalescences) adjacent memory blocks as they are freed, and in so doing
  * limits memory fragmentation.
  */</span></code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/portable/MemMang/heap_4.c — lines 29–33</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/portable/MemMang/heap_4.c" data-lines="29-35"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/portable/MemMang/heap_4.c.html?lines=29-35#L29"><code>./reference/FreeRTOS-Kernel/portable/MemMang/heap_4.c</code></a> — lines 29–35</p>
   <div class="callout key">
     <span class="label">Verdict</span>
     Coalescence, best-fit search, block-link bookkeeping, alignment, thread-safety — hundreds of lines of it — are pulled <em>down</em> below a two-function interface. You choose your allocator <strong>once</strong>, by linking one <code>.c</code> file, and then never think about it again: your call site is always <code>pvPortMalloc( n )</code>. The complexity didn't disappear; it was moved to the narrowest, cheapest place to pay for it — and made a <a href="../reference/glossary.html">variation seam</a> so a project can trade determinism for anti-fragmentation without touching a single caller.
@@ -68,7 +68,7 @@
     pxNewTCB  = pvPortMalloc( sizeof( TCB_t ) );
     ( <span class="kw">void</span> ) memset( pxNewTCB, 0x00, sizeof( TCB_t ) );
 <span class="kw">#endif</span></code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/tasks.c — <code>prvCreateTask</code>, <code>portSTACK_GROWTH</code> fork at lines 1643–1710 (abridged)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/tasks.c" data-lines="1631-1726"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=1631-1726#L1631"><code>./reference/FreeRTOS-Kernel/tasks.c</code></a> — <code>prvCreateTask</code>, lines 1631–1726; the <code>portSTACK_GROWTH</code> fork is at lines 1643–1710</p>
   <p>The interface you actually touch stays serene — <code>xTaskCreate( fn, name, stackDepth, param, prio, &amp;handle )</code>. You pass a stack <em>depth</em>, a plain number; the module eats the allocation, the ordering, the zeroing, and the CPU-specific direction. That is complexity pulled downward until the caller sees a flat, obvious call.</p>
 
   <h2>The honest borderline: when you push complexity <em>up</em> on purpose</h2>
@@ -77,7 +77,7 @@
 TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode, ...,
                                 StackType_t  * const puxStackBuffer,
                                 StaticTask_t * const pxTaskBuffer );</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/task.h — lines 523–529 (verified)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/task.h" data-lines="523-529"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/task.h.html?lines=523-529#L523"><code>./reference/FreeRTOS-Kernel/include/task.h</code></a> — lines 523–529</p>
   <p>This shoves real complexity <em>up</em>: now <em>you</em> must declare and own the stack buffer and the TCB buffer and keep them alive for the task's whole life. Why is that not the exact anti-pattern we just condemned? Because an <strong>external force</strong> demands it: safety-critical and MISRA-constrained builds forbid dynamic allocation outright (<code>configSUPPORT_DYNAMIC_ALLOCATION 0</code>). When the heap is off the table, the memory <em>has</em> to come from the caller — the complexity is real and irreducible, not manufactured laziness. Two things make the push-up honest rather than a leak:</p>
   <ul>
     <li>It's a <strong>separate, explicitly named interface</strong> (<code>...Static</code>), not extra parameters bolted onto the simple one. The caller opts in, eyes open.</li>
@@ -116,7 +116,7 @@ TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode, ...,
 
   <div class="primary">
     <span class="label">Primary source — read this next</span>
-    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 8 ("Pull Complexity Downward"),</strong> and note his own caution that pulling down isn't universal — it's right when the complexity is closely related to the module's function, when it simplifies many callers, and when it genuinely shrinks the interface. Then read the top-of-file comments of <code>heap_1.c</code> and <code>heap_4.c</code> in <code>./reference/FreeRTOS-Kernel/portable/MemMang/</code> back to back: same two-function contract, opposite amounts of complexity absorbed.</p>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 8 ("Pull Complexity Downward"),</strong> and note his own caution that pulling down isn't universal — it's right when the complexity is closely related to the module's function, when it simplifies many callers, and when it genuinely shrinks the interface. Then read the top-of-file comments of <code>heap_1.c</code> and <code>heap_4.c</code> in <a class="code-ref" href="../reference/FreeRTOS-Kernel/portable/MemMang"><code>./reference/FreeRTOS-Kernel/portable/MemMang/</code></a> back to back: same two-function contract, opposite amounts of complexity absorbed.</p>
   </div>
 
   <div class="ask">
@@ -127,8 +127,8 @@ TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode, ...,
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 8 (pull complexity downward; simple interface &gt; simple implementation; and its limits).</li>
-      <li id="s2">One interface, five implementations: <code>./reference/FreeRTOS-Kernel/include/portable.h</code> lines 189/192; <code>portable/MemMang/heap_1.c</code>…<code>heap_5.c</code> (178/407/106/638/756 lines); <code>heap_4.c</code> lines 29–33 (coalescence contract).</li>
-      <li id="s3">Absorbed hardware ugliness &amp; the honest push-up: <code>./reference/FreeRTOS-Kernel/tasks.c</code> <code>prvCreateTask</code> — <code>portSTACK_GROWTH</code> fork at lines 1643–1710; <code>include/task.h</code> lines 523–529 (<code>xTaskCreateStatic</code>).</li>
+      <li id="s2">One interface, five implementations: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/portable.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/portable.h</code></a> lines 189 and 192; <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/portable/MemMang/heap_1.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/portable/MemMang/heap_1.c</code></a> lines 1–178, <code>heap_2.c</code> lines 1–407, <code>heap_3.c</code> lines 1–106, <code>heap_4.c</code> lines 1–638, and <code>heap_5.c</code> lines 1–756; <code>heap_4.c</code> lines 29–35 (coalescence contract).</li>
+      <li id="s3">Absorbed hardware ugliness &amp; the honest push-up: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/tasks.c</code></a> <code>prvCreateTask</code> lines 1631–1726, with the <code>portSTACK_GROWTH</code> fork at lines 1643–1710; <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/task.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/task.h</code></a> lines 523–529 (<code>xTaskCreateStatic</code>).</li>
     </ol>
   </div>
 

@@ -16,12 +16,12 @@
   <p class="mission"><b>Why this lesson:</b> C11 argued a type is a <em>wall for the generator</em> and the <em>machine-checked</em> contract. The opaque handle is that argument made concrete in a language with no access control: it turns "you may not touch my internals" from a code-review plea into a <em>compile error</em>. But it is a tradeoff, not a free good — and a strategic reviewer must be able to price both sides.</p>
 
   <h2>Specimen: the queue you're structurally forbidden to see</h2>
-  <p>Two files. First, the entire public face of a queue — <code>./reference/FreeRTOS-Kernel/include/queue.h</code>:</p>
+  <p>Two files. First, the entire public face of a queue — <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a>:</p>
   <pre><code><span class="cmt">/* queue.h — the PUBLIC face, all a caller ever gets */</span>
 <span class="kw">struct</span> QueueDefinition;   <span class="cmt">/* forward declaration only — no body */</span>
 <span class="kw">typedef struct</span> QueueDefinition * QueueHandle_t;</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/queue.h — lines 50–51 (verified)</p>
-  <p>The caller sees the <em>name</em> of a struct and a pointer to it — nothing else. The body lives in a different translation unit entirely — <code>./reference/FreeRTOS-Kernel/queue.c</code>:</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/queue.h" data-lines="50-51"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=50-51#L50"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a> — lines 50–51</p>
+  <p>The caller sees the <em>name</em> of a struct and a pointer to it — nothing else. The body lives in a different translation unit entirely — <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/queue.c</code></a>:</p>
   <pre><code><span class="cmt">/* queue.c — the PRIVATE body, invisible to every caller */</span>
 <span class="kw">typedef struct</span> QueueDefinition {  <span class="cmt">/* comment: old name kept so debuggers still work */</span>
     int8_t * pcHead, * pcWriteTo;                 <span class="cmt">/* storage cursors      */</span>
@@ -32,7 +32,7 @@
     UBaseType_t uxLength, uxItemSize;
     <span class="kw">volatile</span> int8_t cRxLock, cTxLock;             <span class="cmt">/* + config-gated fields */</span>
 } xQUEUE;</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/queue.c — lines 103–136 (abridged, verified)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/queue.c" data-lines="103-140"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=103-140#L103"><code>./reference/FreeRTOS-Kernel/queue.c</code></a> — lines 103–140</p>
 
   <h2>The mechanism — precisely why the wall holds</h2>
   <p>Because the header only <em>forward-declares</em> <code>struct QueueDefinition</code>, at every call site that struct is an <strong>incomplete type</strong>: a type whose name is known but whose size and members are not. The C standard is exact about what you may and may not do with one, and that asymmetry is the whole trick:</p>
@@ -109,7 +109,7 @@
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 5 (information hiding is the primary technique for deep modules; leakage is its failure).</li>
-      <li id="s2">Specimen (verified): <code>./reference/FreeRTOS-Kernel/include/queue.h</code> (forward decl + <code>QueueHandle_t</code>, lines 50–51) vs <code>queue.c</code> (<code>struct QueueDefinition</code> body, lines 103–136).</li>
+      <li id="s2">Specimen: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a> (forward decl + <code>QueueHandle_t</code>, lines 50–51) vs <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/queue.c</code></a> (<code>struct QueueDefinition</code> body, lines 103–140).</li>
       <li id="s3">Allocation tradeoff: <code>xQueueCreate</code> vs <code>xQueueCreateStatic</code> in <code>queue.h</code> — the static variant exists because the type is opaque.</li>
     </ol>
   </div>

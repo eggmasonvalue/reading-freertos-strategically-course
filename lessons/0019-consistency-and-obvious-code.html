@@ -19,7 +19,7 @@
   <p>Ousterhout: consistency reduces cognitive load and unknown-unknowns — if similar things are done similarly, a reader relies on instincts instead of re-verifying each case.<sup class="cite"><a href="#s1">1</a></sup> Code is <strong>obvious</strong> when a reader forms the right conclusion quickly, without much thought. Consistency is one of the biggest contributors to obviousness; surprising one-offs are one of its biggest enemies. The mechanism is specifically about the reader's <em>prior</em>: consistency lets them predict the unseen from the seen, and every violation silently poisons that prediction everywhere.</p>
 
   <h2>Specimen: how a safety-critical codebase records its exceptions</h2>
-  <p>The kernel conforms to MISRA C:2012 — a strict, consistent rule set — but a small kernel sometimes <em>must</em> break a rule for footprint or performance. It never does so silently. In <code>./reference/FreeRTOS-Kernel/MISRA.md</code>:</p>
+  <p>The kernel conforms to MISRA C:2012 — a strict, consistent rule set — but a small kernel sometimes <em>must</em> break a rule for footprint or performance. It never does so silently. In <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/MISRA.md.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/MISRA.md</code></a>:</p>
   <pre><code><span class="cmt">#### Dir 4.7</span>
 MISRA C:2012 Dir 4.7: If a function returns error information, then that
 error information shall be tested.
@@ -27,7 +27,7 @@ error information shall be tested.
 <span class="cmt">_Ref 4.7.1_</span>
  - taskENTER_CRITICAL_FROM_ISR returns the interrupt mask and not any error
    information. Therefore, there is no need to test the return value.</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/MISRA.md — deviation records, checked by Coverity 2023.6.1 (verified)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/MISRA.md" data-lines="3-9,21-28"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/MISRA.md.html?lines=3-9,21-28#L3"><code>./reference/FreeRTOS-Kernel/MISRA.md</code></a> — deviation records, lines 3–9 and 21–28</p>
   <div class="callout key">
     <span class="label">The pattern (you've seen its shape before)</span>
     Every deviation carries three things: the <strong>rule</strong> broken, a grepable <strong>reference tag</strong> (<code>Ref 4.7.1</code>) that ties to the exact inline suppression in the source, and a <strong>justification</strong>. This is <a href="0003-a-documented-decision.html">A3</a>'s <em>objection → justification → evidence → escape hatch</em> at codebase scale: the rule is the objection, the note is the justification, the Coverity tag is traceable evidence. Consistency isn't "never break the rule" — it's "<strong>break it only in the open, with a reason the next reader can find.</strong>"
@@ -73,7 +73,7 @@ error information shall be tested.
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 17 (consistency) &amp; ch. 18 (obvious code).</li>
-      <li id="s2">Specimen (verified): <code>MISRA.md</code> — documented deviation records (Dir 4.7, Rule 8.4) with grepable Coverity reference tags.</li>
+      <li id="s2">Specimen: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/MISRA.md.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/MISRA.md</code></a> — documented deviation records (Dir 4.7, Rule 8.4), lines 3–9 and 21–28, with grepable Coverity reference tags.</li>
       <li id="s3">Ralph Waldo Emerson, "Self-Reliance" (1841) — "A foolish consistency is the hobgoblin of little minds." Cited for the deviate-deliberately synthesis.</li>
     </ol>
   </div>

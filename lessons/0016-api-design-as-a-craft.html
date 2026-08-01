@@ -24,7 +24,7 @@ BaseType_t xQueueSend( QueueHandle_t xQueue, <span class="kw">const void</span> 
 <span class="cmt">/* interrupt context — never blocks; reports if it woke a task */</span>
 BaseType_t xQueueSendFromISR( QueueHandle_t xQueue, <span class="kw">const void</span> * pvItemToQueue,
                               BaseType_t * pxHigherPriorityTaskWoken );</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/queue.h — <code>xQueueSend</code> · <code>xQueueSendFromISR</code> (macro, line 1286, verified)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/queue.h" data-lines="513-514,1286-1287"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=513-514,1286-1287#L513"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a> — <code>xQueueSend</code> lines 513–514 and <code>xQueueSendFromISR</code> lines 1286–1287</p>
   <div class="callout key">
     <span class="label">Why two functions beats one flag</span>
     They could have written one function with an <code>isFromISR</code> boolean. Instead the calling context is baked into the <em>function's identity</em>. Three payoffs: (1) the wrong call is <em>hard to write</em> — you can't pass a timeout from an ISR because the parameter isn't there; (2) the <code>FromISR</code> suffix makes an audit trivial — grep it and every ISR-reachable path is named; (3) it's self-documenting at the call site. Context that matters became part of the <em>name and signature</em> rather than a runtime argument — the craft face of C11's "the signature is the spec."

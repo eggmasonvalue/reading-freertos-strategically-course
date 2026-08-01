@@ -31,7 +31,7 @@
   </div>
 
   <h2>Specimen: where FreeRTOS deliberately leaves a wall down</h2>
-  <p>Open <code>./reference/FreeRTOS-Kernel/include/semphr.h</code> and <code>include/queue.h</code>:</p>
+  <p>Open <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/semphr.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/semphr.h</code></a> and <code>include/queue.h</code>:</p>
   <pre><code><span class="cmt">/* semphr.h */</span>
 <span class="kw">typedef</span> QueueHandle_t SemaphoreHandle_t;              <span class="cmt">/* line 38 */</span>
 
@@ -39,7 +39,8 @@
 <span class="kw">typedef struct</span> QueueDefinition * QueueHandle_t;         <span class="cmt">/* 51 */</span>
 <span class="kw">typedef struct</span> QueueDefinition * QueueSetHandle_t;       <span class="cmt">/* 58 */</span>
 <span class="kw">typedef struct</span> QueueDefinition * QueueSetMemberHandle_t; <span class="cmt">/* 65 */</span></code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/semphr.h:38 · include/queue.h:51,58,65 (verified)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/semphr.h" data-lines="38"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/semphr.h.html?lines=38#L38"><code>./reference/FreeRTOS-Kernel/include/semphr.h</code></a> — line 38</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/queue.h" data-lines="51,58,65"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=51,58,65#L51"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a> — lines 51, 58, 65</p>
 
   <div class="callout watch">
     <span class="label">The exact C rule that makes this a hole</span>
@@ -60,7 +61,7 @@ xQueueSend( s, &amp;data, 0 );   <span class="cmt">/* sending DATA to a semaphor
 configASSERT( pxQueue-&gt;uxItemSize == 0 );                <span class="cmt">/* line 1355 */</span>
 <span class="cmt">/* xQueuePeekFromISR */</span>
 configASSERT( pxQueue-&gt;uxItemSize != 0 );  <span class="cmt">/* line 2150: "Can't peek a semaphore." */</span></code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/queue.c — lines 1355, 1677, 2150 (verified)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/queue.c" data-lines="1353-1355,1672-1677,2147-2150"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=1353-1355,1672-1677,2147-2150#L1353"><code>./reference/FreeRTOS-Kernel/queue.c</code></a> — lines 1353–1355, 1672–1677, 2147–2150</p>
   <div class="callout key">
     <span class="label">The full, honest picture</span>
     The guarantee didn't vanish; it <em>moved layers</em>. What a strong type system would enforce at <em>compile time, always</em>, FreeRTOS enforces at <em>runtime, only when <code>configASSERT</code> is enabled</em> (lesson <a href="0014-design-by-contract.html">C14</a>). A strategic reviewer states both halves in one breath: <em>"the handle types are unified for reuse; distinctness is recovered at runtime via <code>uxItemSize</code>/<code>ucQueueType</code> asserts — so on a release build with asserts off, misusing a semaphore as a queue is undefined behavior with no diagnostic at all."</em> That sentence is the whole lesson: know which wall exists, at which layer, under which build.

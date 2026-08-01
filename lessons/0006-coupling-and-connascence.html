@@ -26,12 +26,12 @@
   <p><strong>What connascence does <em>not</em> claim.</strong> It is a <em>ruler</em>, not a commandment. It does not say all connascence is bad, or that you must drive it to zero — you can't; two pieces of code that must agree to be correct are connascent <em>by definition</em>, and a working system is full of necessary agreement. The claim is narrower and more useful: connascence tells you which coupling is <em>strong</em> and whether its <em>distance</em> makes that strength dangerous, so you know which one to weaken <em>first</em>. Strong connascence packed inside one small function is often perfectly fine (see the fold); the same strength stretched across a module boundary is the target. The taxonomy ranks priorities; it does not outlaw coupling.</p>
 
   <h2>Specimen A: connascence of <em>position</em></h2>
-  <p>Open <code>./reference/FreeRTOS-Kernel/include/queue.h</code>. The workhorse send function:</p>
+  <p>Open <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a>. The workhorse send function:</p>
   <pre><code>BaseType_t xQueueGenericSend( QueueHandle_t xQueue,
                               <span class="kw">const void</span> * <span class="kw">const</span> pvItemToQueue,
                               TickType_t xTicksToWait,
                               <span class="kw">const</span> BaseType_t xCopyPosition );</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/queue.h — lines 686–690</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/queue.h" data-lines="686-690"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=686-690#L686"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a> — lines 686–690</p>
   <p>Four positional arguments. Every call site and the function must agree on the <em>order</em>: swap <code>xTicksToWait</code> and <code>xCopyPosition</code> in the signature and every caller silently breaks — both are integer-ish types, so the compiler may not even complain. That is <strong>connascence of position</strong>, and it lives across a module boundary (kernel ↔ every caller). By the cheat-sheet's ranking it's among the stronger <em>static</em> forms — precisely because there's no name to anchor the agreement, only a slot number.</p>
   <div class="callout key">
     <span class="label">The downgrade</span>
@@ -45,7 +45,8 @@
 <span class="kw">#define</span> pdFAIL               ( pdFALSE )           <span class="cmt">/* not a bare 0 */</span>
 <span class="kw">#define</span> queueSEND_TO_BACK    ( ( BaseType_t ) 0 )
 <span class="kw">#define</span> queueSEND_TO_FRONT   ( ( BaseType_t ) 1 )</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/projdefs.h — lines 52–60; include/queue.h — lines 68–69</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/projdefs.h" data-lines="59-60"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/projdefs.h.html?lines=59-60#L59"><code>./reference/FreeRTOS-Kernel/include/projdefs.h</code></a> — lines 59–60</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/queue.h" data-lines="68-69"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=68-69#L68"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a> — lines 68–69</p>
   <p>By giving the magic values names, the kernel deliberately performed the cheat-sheet's headline move: <strong>meaning → name</strong>. A caller writes <code>queueSEND_TO_FRONT</code>, not <code>1</code>; nobody has to <em>remember</em> that 1 means front. This is the same instinct as the whole codebase — the Hungarian prefixes, the opaque handles — turned on a humble constant. Seeing that the kernel does this <em>on purpose</em> is the lesson: strong coupling isn't fate, it's a thing you actively weaken.</p>
 
   <h2>Specimen C: connascence of <em>algorithm</em> (the one to watch)</h2>
@@ -53,7 +54,7 @@
   <blockquote style="border-left:3px solid var(--rule);margin:0.8rem 0;padding:0.2rem 0 0.2rem 1rem;color:var(--ink-soft);font-size:0.92rem">
     "…will set <code>*pxHigherPriorityTaskWoken</code> to <code>pdTRUE</code> if sending caused a higher-priority task to unblock. If it sets this to <code>pdTRUE</code> then a context switch should be requested before the interrupt is exited."
   </blockquote>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/queue.h — lines 996–999</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/queue.h" data-lines="1319-1323"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=1319-1323#L1319"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a> — lines 1319–1323</p>
   <p>That is a shared <strong>protocol</strong> the ISR author must execute in step with the kernel: initialise the flag to <code>pdFALSE</code>, pass its address, then <em>after</em> the call, if it's <code>pdTRUE</code>, request a yield. Caller and kernel are connascent on an <em>algorithm</em> — the strongest static form on the sheet, and it's spread across every ISR that touches a queue (high <em>degree</em>, long <em>distance</em>). The kernel accepts this cost for real-time reasons, and it pays it down the only way you can: by <em>documenting the protocol precisely</em> at the interface (your <a href="0003-a-documented-decision.html">Lesson 3</a> skill), so the shared algorithm is at least legible.</p>
 
   <details class="deep"><summary>Deep dive — static vs dynamic connascence, and why the ISR dance is the scary kind</summary>
@@ -100,7 +101,7 @@
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Connascence taxonomy &amp; Weirich's rules: Page-Jones (1992 CACM; 1996 book), catalogued at <a href="https://connascence.io/">connascence.io</a>. Summarised in <a href="../reference/connascence.html">the course cheat-sheet</a>.</li>
-      <li id="s2">Specimens: <code>./reference/FreeRTOS-Kernel/include/queue.h</code> (lines 686–690 args; 68–69 constants &amp; 996–999 the FromISR protocol contract) and <code>include/projdefs.h</code> (lines 52–60).</li>
+      <li id="s2">Specimens: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a> (lines 686–690 args; 68–69 constants; 1319–1323 the generic FromISR protocol contract) and <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/projdefs.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/projdefs.h</code></a> (lines 59–60).</li>
     </ol>
   </div>
 

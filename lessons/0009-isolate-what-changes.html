@@ -33,7 +33,7 @@
   <pre><code><span class="cmt">/* FreeRTOS.h — the very first thing the kernel does is ask you for the secrets */</span>
 <span class="cmt">/* Application specific configuration options. */</span>
 <span class="kw">#include</span> "FreeRTOSConfig.h"</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/FreeRTOS.h — line 58</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/FreeRTOS.h" data-lines="58"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/FreeRTOS.h.html?lines=58#L58"><code>./reference/FreeRTOS-Kernel/include/FreeRTOS.h</code></a> — line 58</p>
   <p>Roughly <strong>100 distinct <code>config*</code> / <code>INCLUDE_*</code> macros</strong> are read across the kernel, and every one of them resolves at this single seam. The kernel body never says "assume 32-bit ticks" or "assume mutexes exist" — it asks the seam. Three moves make the seam load-bearing rather than decorative:</p>
 
   <h3>1. Sensible defaults, provided centrally</h3>
@@ -48,7 +48,7 @@
 <span class="kw">#ifndef</span> INCLUDE_vTaskDelete
     <span class="kw">#define</span> INCLUDE_vTaskDelete      0
 <span class="kw">#endif</span></code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/FreeRTOS.h — lines 330, 334, 226</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/FreeRTOS.h" data-lines="226-228,330-336"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/FreeRTOS.h.html?lines=226-228,330-336#L226"><code>./reference/FreeRTOS-Kernel/include/FreeRTOS.h</code></a> — lines 226–228, 330–336</p>
 
   <h3>2. The seam validates itself</h3>
   <p>Some decisions <em>must</em> be made, or make no sense in combination. The seam refuses to compile rather than silently guess — pushing errors to build time, where they're cheapest:</p>
@@ -57,7 +57,7 @@
     <span class="kw">#error</span> Missing definition: One of configUSE_16_BIT_TICKS and
            configTICK_TYPE_WIDTH_IN_BITS must be defined in FreeRTOSConfig.h.
 <span class="kw">#endif</span></code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/FreeRTOS.h — lines 60–62</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/FreeRTOS.h" data-lines="60-62"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/FreeRTOS.h.html?lines=60-62#L60"><code>./reference/FreeRTOS-Kernel/include/FreeRTOS.h</code></a> — lines 60–62</p>
 
   <h3>3. Whole features vanish through the seam</h3>
   <p>Because the macro is known in one place, a feature can be <em>compiled out entirely</em> — not just disabled at runtime. Set <code>INCLUDE_vTaskDelete</code> to 0 and the function isn't merely unreachable, it doesn't exist:</p>
@@ -65,7 +65,7 @@
 <span class="kw">#if</span> ( INCLUDE_vTaskDelete == 1 )
     <span class="kw">void</span> vTaskDelete( TaskHandle_t xTaskToDelete ) { <span class="cmt">/* ...200 lines... */</span> }
 <span class="kw">#endif</span></code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/tasks.c — line 485 (guard repeats at every use site, e.g. 626)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/tasks.c" data-lines="485-490,626-630"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=485-490,626-630#L485"><code>./reference/FreeRTOS-Kernel/tasks.c</code></a> — lines 485–490 and 626–630</p>
 
   <div class="callout key">
     <span class="label">Verdict</span>
@@ -107,7 +107,7 @@
 
   <div class="primary">
     <span class="label">Primary source — read this next</span>
-    <p style="margin:0.4rem 0 0"><strong>Parnas, <em>On the Criteria To Be Used in Decomposing Systems into Modules</em> (CACM, 1972)</strong> — short and still the clearest statement of the idea: decompose by <em>anticipated change</em>, not by processing steps. Pair it with <strong>Ousterhout Ch. 9 (context) &amp; the information-hiding thread of Ch. 5.</strong> Then open <code>./reference/FreeRTOS-Kernel/include/FreeRTOS.h</code> and scroll the long <code>#ifndef config… #define config…</code> block — you are reading the complete list of decisions FreeRTOS chose to make changeable.</p>
+    <p style="margin:0.4rem 0 0"><strong>Parnas, <em>On the Criteria To Be Used in Decomposing Systems into Modules</em> (CACM, 1972)</strong> — short and still the clearest statement of the idea: decompose by <em>anticipated change</em>, not by processing steps. Pair it with <strong>Ousterhout Ch. 9 (context) &amp; the information-hiding thread of Ch. 5.</strong> Then open <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/FreeRTOS.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/FreeRTOS.h</code></a> and scroll the long <code>#ifndef config… #define config…</code> block — you are reading the complete list of decisions FreeRTOS chose to make changeable.</p>
   </div>
 
   <div class="ask">
@@ -118,8 +118,8 @@
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Parnas, D.L., <em>On the Criteria To Be Used in Decomposing Systems into Modules</em>, CACM 15(12), 1972 (decompose by likely change; information hiding). With Ousterhout, <em>A Philosophy of Software Design</em>, ch. 5 &amp; 9.</li>
-      <li id="s2">The seam: <code>./reference/FreeRTOS-Kernel/include/FreeRTOS.h</code> line 58 (config pulled in first); lines 60–62 (<code>#error</code> self-validation); lines 226/330/334 (central defaults). ~100 <code>config*</code>/<code>INCLUDE_*</code> macros referenced across the kernel.</li>
-      <li id="s3">Compile-out through the seam: <code>./reference/FreeRTOS-Kernel/tasks.c</code> line 485 (<code>#if ( INCLUDE_vTaskDelete == 1 )</code>).</li>
+      <li id="s2">The seam: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/FreeRTOS.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/FreeRTOS.h</code></a> line 58 (config pulled in first); lines 60–62 (<code>#error</code> self-validation); lines 226–228 and 330–336 (central defaults). The remaining <code>config*</code>/<code>INCLUDE_*</code> uses are distributed across the kernel.</li>
+      <li id="s3">Compile-out through the seam: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/tasks.c</code></a> lines 485–490 and 626–630 (<code>#if ( INCLUDE_vTaskDelete == 1 )</code> and a repeated use-site guard).</li>
     </ol>
   </div>
 

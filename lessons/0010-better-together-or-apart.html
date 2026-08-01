@@ -34,13 +34,15 @@
   <p>The kernel's own layout is the argument. Look at the two biggest source files:</p>
   <pre><code>tasks.c    8918 lines   <span class="cmt">// scheduler + TCB + ready/delayed lists + state machine</span>
 queue.c    3391 lines   <span class="cmt">// queues/semaphores/mutexes: the ring buffer + blocking</span></code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/ — line counts via wc -l</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/tasks.c" data-lines="1-8918"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=1-8918#L1"><code>./reference/FreeRTOS-Kernel/tasks.c</code></a> — lines 1–8918</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/queue.c" data-lines="1-3391"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=1-3391#L1"><code>./reference/FreeRTOS-Kernel/queue.c</code></a> — lines 1–3391</p>
 
   <h3>Why <code>tasks.c</code> is <em>correctly</em> monolithic</h3>
   <p>The scheduler, the task-state machine, the ready and delayed lists, and the <code>TCB_t</code> structure itself are one tightly-woven secret. The context switcher reads the ready lists; the delay logic edits the same lists; every path mutates TCB fields directly. Crucially, <strong>the definition of <code>TCB_t</code> lives inside <code>tasks.c</code> and appears in no public header</strong> — outside the file a task is only an opaque handle:</p>
   <pre><code><span class="cmt">/* task.h — the outside world gets a handle, never the struct */</span>
 <span class="kw">typedef</span> <span class="kw">struct</span> tskTaskControlBlock * TaskHandle_t;</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/include/task.h — line 99 (the full <code>TCB_t</code> is defined only in tasks.c)</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/include/task.h" data-lines="98-100"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/task.h.html?lines=98-100#L98"><code>./reference/FreeRTOS-Kernel/include/task.h</code></a> — lines 98–100</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/tasks.c" data-lines="377-459"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=377-459#L377"><code>./reference/FreeRTOS-Kernel/tasks.c</code></a> — lines 377–459 (the full <code>TCB_t</code> definition)</p>
   <p>Splitting "the scheduler" from "task creation" from "the delayed-list logic" into separate files would force <code>TCB_t</code>'s layout to become shared across those seams — the secret would leak out of exactly the one place that's allowed to know it. The pieces are <em>hard to understand apart</em> and they <em>share information</em> constantly: by Ch. 9, they belong together. The size is a <em>consequence</em> of correct grouping, not a defect.</p>
 
   <h3>Why <code>queue.c</code> is <em>correctly</em> separate</h3>
@@ -49,7 +51,7 @@ queue.c    3391 lines   <span class="cmt">// queues/semaphores/mutexes: the ring
 vTaskPlaceOnEventList( ... );        <span class="cmt">// "park this caller until I signal"</span>
 xTaskRemoveFromEventList( ... );     <span class="cmt">// "wake the highest-priority waiter"</span>
 vTaskMissedYield();  xTaskCheckForTimeOut( ... );  xTaskGetSchedulerState();</code></pre>
-  <p class="filecite">./reference/FreeRTOS-Kernel/queue.c — ~8 distinct <code>...Task...</code> functions; no access to <code>TCB_t</code> internals</p>
+  <p class="filecite" data-source="FreeRTOS-Kernel/queue.c" data-lines="336,774,833,965,1121-1126,1682,1723,1779-1806,1902,2413,2525-2598,3164,3363"><a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=336,774,833,965,1121-1126,1682,1723,1779-1806,1902,2413,2525-2598,3164,3363#L336"><code>./reference/FreeRTOS-Kernel/queue.c</code></a> — exact <code>...Task...</code> call sites at lines 336, 774, 833, 965, 1121–1126, 1682, 1723, 1779–1806, 1902, 2413, 2525–2598, 3164, 3363</p>
   <div class="callout key">
     <span class="label">Verdict</span>
     Same codebase, opposite decisions, one rule. <code>tasks.c</code> stays whole because its parts share the <code>TCB_t</code> secret and reading them apart would be harder <em>and</em> would leak that secret. <code>queue.c</code> stands apart because it shares almost nothing with tasks — the boundary between them is a thin, published set of ~8 functions across which no structure layout ever travels. The decision was made on <strong>width of the seam</strong>, and line count fell out afterward. That thin line is also, in <a href="0006-coupling-and-connascence.html">connascence</a> terms, the whole point: a narrow interface keeps the strong connascence <em>inside</em> each file and only weak connascence crossing between them.
@@ -90,7 +92,7 @@ vTaskMissedYield();  xTaskCheckForTimeOut( ... );  xTaskGetSchedulerState();</co
 
   <div class="primary">
     <span class="label">Primary source — read this next</span>
-    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 9 ("Better Together or Better Apart?").</strong> Note his four "bring together" signals (shared info, used together, conceptual overlap, hard-to-understand-apart) and the warning against splitting that creates coupling. Then verify the specimen: in <code>./reference/FreeRTOS-Kernel/</code>, confirm <code>TCB_t</code> is defined only in <code>tasks.c</code>, and grep <code>queue.c</code> for the <code>...Task...</code> calls — that short list <em>is</em> the seam.</p>
+    <p style="margin:0.4rem 0 0"><strong>Ousterhout, <em>A Philosophy of Software Design</em> — Ch. 9 ("Better Together or Better Apart?").</strong> Note his four "bring together" signals (shared info, used together, conceptual overlap, hard-to-understand-apart) and the warning against splitting that creates coupling. Then verify the specimen: in <a class="code-ref" href="../reference/FreeRTOS-Kernel"><code>./reference/FreeRTOS-Kernel/</code></a>, confirm <code>TCB_t</code> is defined only in <code>tasks.c</code>, and grep <code>queue.c</code> for the <code>...Task...</code> calls — that short list <em>is</em> the seam.</p>
   </div>
 
   <div class="ask">
@@ -101,7 +103,7 @@ vTaskMissedYield();  xTaskCheckForTimeOut( ... );  xTaskGetSchedulerState();</co
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 9 (better together or apart; bring-together signals; splits that add coupling).</li>
-      <li id="s2">Together: <code>./reference/FreeRTOS-Kernel/tasks.c</code> (8918 lines; <code>TCB_t</code> defined here only) &amp; <code>include/task.h</code> line 99 (opaque <code>TaskHandle_t</code>). Apart: <code>queue.c</code> (3391 lines) reaching tasks via ~8 published functions (<code>vTaskPlaceOnEventList</code>, <code>xTaskRemoveFromEventList</code>, <code>vTaskMissedYield</code>, <code>xTaskCheckForTimeOut</code>, <code>xTaskGetSchedulerState</code>, …), never touching <code>TCB_t</code> fields.</li>
+      <li id="s2">Together: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/tasks.c</code></a> lines 1–8918 (<code>TCB_t</code> defined at lines 377–459) and <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/task.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/task.h</code></a> lines 98–100 (opaque <code>TaskHandle_t</code>). Apart: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/queue.c</code></a> lines 1–3391, with task-boundary call sites at lines 336, 774, 833, 965, 1121–1126, 1682, 1723, 1779–1806, 1902, 2413, 2525–2598, 3164, and 3363; it never touches <code>TCB_t</code> fields.</li>
       <li id="s3">Other earned splits (own secret + thin interface): <code>timers.c</code>, <code>event_groups.c</code>, <code>stream_buffer.c</code>.</li>
     </ol>
   </div>
