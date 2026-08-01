@@ -81,7 +81,7 @@ BaseType_t xQueueReceive( QueueHandle_t xQueue, <span class="kw">void</span> * p
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 10 (define errors out of existence; mask; aggregate; crash).</li>
-      <li id="s2">Specimen (verified): <code>queue.h:913</code> (<code>xQueueReceive</code>, can fail) vs <code>task.h:894,840</code> (<code>vTaskDelay</code>/<code>vTaskDelete</code>, <code>void</code>); self-delete absorbed via <code>xTasksWaitingTermination</code> + Idle task, <code>tasks.c:2269,2330–2335</code>.</li>
+      <li id="s2">Specimen (verified): <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=913-915#L913"><code>queue.h:913–915</code> (<code>xQueueReceive</code>, can fail)</a> vs <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/task.h.html?lines=840,894#L840"><code>task.h:840,894</code> (<code>vTaskDelay</code>/<code>vTaskDelete</code>, <code>void</code>)</a>; self-delete absorbed via <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=2263-2274,2330-2335,5881-5885,6158-6187,6519-6539#L2263"><code>xTasksWaitingTermination</code> + Idle task, tasks.c:2263–2274, 2330–2335, 5881–5885, 6158–6187, 6519–6539</a>.</li>
     </ol>
   </div>
 

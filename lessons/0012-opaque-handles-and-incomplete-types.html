@@ -109,8 +109,8 @@
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 5 (information hiding is the primary technique for deep modules; leakage is its failure).</li>
-      <li id="s2">Specimen: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/queue.h</code></a> (forward decl + <code>QueueHandle_t</code>, lines 50–51) vs <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/queue.c</code></a> (<code>struct QueueDefinition</code> body, lines 103–140).</li>
-      <li id="s3">Allocation tradeoff: <code>xQueueCreate</code> vs <code>xQueueCreateStatic</code> in <code>queue.h</code> — the static variant exists because the type is opaque.</li>
+      <li id="s2">Specimen: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=50-51#L50"><code>./reference/FreeRTOS-Kernel/include/queue.h</code> (forward decl + <code>QueueHandle_t</code>, lines 50–51)</a> vs <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=103-140#L103"><code>./reference/FreeRTOS-Kernel/queue.c</code> (<code>struct QueueDefinition</code> body, lines 103–140)</a>.</li>
+      <li id="s3">Allocation tradeoff: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=149,235#L149"><code>xQueueCreate</code> vs <code>xQueueCreateStatic</code> in <code>queue.h</code></a> — the static variant exists because the type is opaque.</li>
     </ol>
   </div>
 

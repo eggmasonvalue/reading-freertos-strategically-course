@@ -118,8 +118,8 @@
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Parnas, D.L., <em>On the Criteria To Be Used in Decomposing Systems into Modules</em>, CACM 15(12), 1972 (decompose by likely change; information hiding). With Ousterhout, <em>A Philosophy of Software Design</em>, ch. 5 &amp; 9.</li>
-      <li id="s2">The seam: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/FreeRTOS.h.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/include/FreeRTOS.h</code></a> line 58 (config pulled in first); lines 60–62 (<code>#error</code> self-validation); lines 226–228 and 330–336 (central defaults). The remaining <code>config*</code>/<code>INCLUDE_*</code> uses are distributed across the kernel.</li>
-      <li id="s3">Compile-out through the seam: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/tasks.c</code></a> lines 485–490 and 626–630 (<code>#if ( INCLUDE_vTaskDelete == 1 )</code> and a repeated use-site guard).</li>
+      <li id="s2">The seam: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/FreeRTOS.h.html?lines=58,60-62,226-228,330-336#L58"><code>./reference/FreeRTOS-Kernel/include/FreeRTOS.h</code> line 58 (config pulled in first); lines 60–62 (<code>#error</code> self-validation); lines 226–228 and 330–336 (central defaults)</a>. The remaining <code>config*</code>/<code>INCLUDE_*</code> uses are distributed across the kernel.</li>
+      <li id="s3">Compile-out through the seam: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=485-490,626-630#L485"><code>./reference/FreeRTOS-Kernel/tasks.c</code> lines 485–490 and 626–630 (<code>#if ( INCLUDE_vTaskDelete == 1 )</code> and a repeated use-site guard)</a>.</li>
     </ol>
   </div>
 

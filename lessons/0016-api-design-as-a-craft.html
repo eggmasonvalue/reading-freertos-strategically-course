@@ -89,7 +89,7 @@ portYIELD_FROM_ISR( xHigherPriorityTaskWoken );</code></pre>
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Joshua Bloch, "How to Design a Good API and Why It Matters" — easy to use right, hard to use wrong; boolean traps; consistency; "when in doubt, leave it out."</li>
-      <li id="s2">Specimen (verified): <code>queue.h</code> — <code>xQueueSend</code> vs <code>xQueueSendFromISR</code> (line 1286); the <code>pxHigherPriorityTaskWoken</code> out-parameter + <code>portYIELD_FROM_ISR</code> deferred-yield convention.</li>
+      <li id="s2">Specimen (verified): <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=513-514,1240-1247,1255-1278,1286-1287#L513"><code>queue.h</code> — <code>xQueueSend</code> lines 513–514 vs <code>xQueueSendFromISR</code> lines 1286–1287; the <code>pxHigherPriorityTaskWoken</code> out-parameter + <code>portYIELD_FROM_ISR</code> deferred-yield convention, lines 1240–1278</a>.</li>
     </ol>
   </div>
 

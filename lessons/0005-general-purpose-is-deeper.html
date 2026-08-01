@@ -118,8 +118,8 @@ listSET_LIST_ITEM_VALUE( &amp;( pxTCB-&gt;xEventListItem ),
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Ousterhout, <em>A Philosophy of Software Design</em>, ch. 6 (general-purpose modules are deeper).</li>
-      <li id="s2">The general engine &amp; its two hinges: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/list.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/list.c</code></a> (5-function API) and <code>include/list.h</code> lines 144–152 (<code>xItemValue</code>, <code>pvOwner</code>).</li>
-      <li id="s3">Same field, two meanings: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=1#L1"><code>./reference/FreeRTOS-Kernel/tasks.c</code></a> line 8683 (wake-time) vs line 2927 (inverted priority).</li>
+      <li id="s2">The general engine &amp; its two hinges: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/list.c.html?lines=49,89,105,139,217#L49"><code>./reference/FreeRTOS-Kernel/list.c</code> (5-function API; lines 49, 89, 105, 139, 217)</a> and <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/list.h.html?lines=144-152#L144"><code>./reference/FreeRTOS-Kernel/include/list.h</code> lines 144–152 (<code>xItemValue</code>, <code>pvOwner</code>)</a>.</li>
+      <li id="s3">Same field, two meanings: <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/tasks.c.html?lines=8682-8683,2923-2927#L8682"><code>./reference/FreeRTOS-Kernel/tasks.c</code> lines 8682–8683 (wake-time) vs 2923–2927 (inverted priority)</a>.</li>
     </ol>
   </div>
 

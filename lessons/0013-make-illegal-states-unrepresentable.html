@@ -113,7 +113,7 @@ give( myDataQueue );   <span class="cmt">/* ERROR: incompatible type. The wall i
     <p style="font-family:var(--mono);font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--accent)">Sources</p>
     <ol>
       <li id="s1">Alexis King, "Parse, Don't Validate" (2019) — type-driven design; validate once at construction; make illegal states unrepresentable.</li>
-      <li id="s2">Specimen (verified): unified handle type — <code>semphr.h:38</code>, <code>queue.h:51,58,65</code>; runtime backstop — <code>queue.c:1355,1677,2150</code> (<code>uxItemSize</code> asserts). Tradeoff origin: lesson A2 (semaphore = queue).</li>
+      <li id="s2">Specimen (verified): unified handle type — <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/semphr.h.html?lines=38#L38"><code>semphr.h:38</code></a>, <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/include/queue.h.html?lines=51,58,65#L51"><code>queue.h:51,58,65</code></a>; runtime backstop — <a class="code-ref" href="../reference-source/FreeRTOS-Kernel/queue.c.html?lines=1355,1677,2150#L1355"><code>queue.c:1355,1677,2150</code> (<code>uxItemSize</code> asserts)</a>. Tradeoff origin: lesson A2 (semaphore = queue).</li>
     </ol>
   </div>
 
