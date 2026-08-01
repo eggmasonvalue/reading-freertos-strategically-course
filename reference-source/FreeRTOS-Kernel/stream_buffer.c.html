@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FreeRTOS-Kernel/stream_buffer.c — source</title>
 <style>
-:root { --ink:#1a1a1a; --paper:#fdfcf9; --rule:#d9d4c7; --accent:#7a1f1f; --code-bg:#f4f1ea; --hit:#fff0a8; }
+:root { --ink:#1a1a1a; --paper:#fdfcf9; --rule:#d9d4c7; --accent:#7a1f1f; --code-bg:#f4f1ea; --hit:#fff0a8; color-scheme:light dark; }
 * { box-sizing:border-box; }
 body { color:var(--ink); background:var(--paper); margin:0; padding:2rem 1rem 4rem; font-family:Georgia,serif; }
 .wrap { max-width:96rem; margin:0 auto; }
@@ -17,6 +17,11 @@ a { color:var(--accent); }
 .source-line:target, .source-line.hit { background:var(--hit); }
 .line-number { display:inline-block; width:5.5rem; padding-right:1rem; color:#8a8378; text-align:right; text-decoration:none; user-select:none; }
 .source-line code { white-space:pre; }
+@media (prefers-color-scheme: dark) {
+  :root { --ink:#eeeae2; --paper:#171614; --rule:#45413a; --accent:#e4a29d; --code-bg:#25231f; --hit:#584c22; }
+  .meta { color:#b9b1a6; }
+  .line-number { color:#9b9388; }
+}
 </style>
 </head>
 <body>

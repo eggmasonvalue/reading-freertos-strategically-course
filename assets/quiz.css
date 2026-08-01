@@ -52,3 +52,12 @@
   margin-top: 1.1rem; padding: 0.7rem 0.9rem; border-radius: 5px;
   background: var(--note-bg); font-size: 0.9rem; font-style: italic; color: var(--ink-soft);
 }
+
+@media (prefers-color-scheme: dark) {
+  .quiz { background: #201e1b; }
+  .quiz-opt:hover:not(:disabled) { background: #273238; }
+}
+
+@media print {
+  .quiz { background: #fff; }
+}
