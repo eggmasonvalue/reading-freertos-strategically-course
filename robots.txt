@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://eggmasonvalue.github.io/reading-freertos-strategically-course/sitemap.xml
