@@ -4,12 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson 13 — Make Illegal States Unrepresentable</title>
+<meta name="description" content="The most powerful thing a type can do is not describe a value but make a whole category of wrong values impossible to construct. This lesson shows the...">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Lesson 13 — Make Illegal States Unrepresentable">
+<meta property="og:description" content="The most powerful thing a type can do is not describe a value but make a whole category of wrong values impossible to construct. This lesson shows the...">
+<meta property="og:url" content="https://eggmasonvalue.github.io/reading-freertos-strategically-course/lessons/0013-make-illegal-states-unrepresentable.html">
 <link rel="stylesheet" href="../assets/course.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
 <link rel="stylesheet" href="../assets/quiz.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
 <script src="../assets/theme.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Lesson 13 — Make Illegal States Unrepresentable",
+  "description": "The most powerful thing a type can do is not describe a value but make a whole category of wrong values impossible to construct. This lesson shows the...",
+  "author": {
+    "@type": "Person",
+    "name": "eggmasonvalue"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Reading FreeRTOS Strategically"
+  },
+  "url": "https://eggmasonvalue.github.io/reading-freertos-strategically-course/lessons/0013-make-illegal-states-unrepresentable.html"
+}
+</script>
 </head>
 <body>
-<div class="wrap">
+<article class="wrap">
   <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 13 <span class="sep">/</span> Module C <span class="sep">/</span> enrich <span class="sep">/</span> ~15 min</p>
   <h1>The bug the type won't let you write</h1>
   <p class="lede">The most powerful thing a type can do is not describe a value but make a whole category of wrong values impossible to construct. This lesson shows the ideal, proves exactly where C — and FreeRTOS — cannot reach it, and prices the deliberate hole that trade left behind.</p>
@@ -120,7 +142,7 @@ give( myDataQueue );   <span class="cmt">/* ERROR: incompatible type. The wall i
     <a href="0012-opaque-handles-and-incomplete-types.html">← Lesson 12</a>
     <a href="0014-design-by-contract.html">Lesson 14 — Design by Contract →</a>
   </div>
-</div>
+</article>
 
 <script src="../assets/quiz.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 <script>

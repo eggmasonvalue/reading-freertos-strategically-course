@@ -4,12 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson 8 — Pull Complexity Downward</title>
+<meta name="description" content="Complexity in a system is conserved — it doesn't vanish, it only moves. The one real choice a designer makes is where it lands: inside the module, paid once...">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Lesson 8 — Pull Complexity Downward">
+<meta property="og:description" content="Complexity in a system is conserved — it doesn't vanish, it only moves. The one real choice a designer makes is where it lands: inside the module, paid once...">
+<meta property="og:url" content="https://eggmasonvalue.github.io/reading-freertos-strategically-course/lessons/0008-pull-complexity-downward.html">
 <link rel="stylesheet" href="../assets/course.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
 <link rel="stylesheet" href="../assets/quiz.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
 <script src="../assets/theme.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Lesson 8 — Pull Complexity Downward",
+  "description": "Complexity in a system is conserved — it doesn't vanish, it only moves. The one real choice a designer makes is where it lands: inside the module, paid once...",
+  "author": {
+    "@type": "Person",
+    "name": "eggmasonvalue"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Reading FreeRTOS Strategically"
+  },
+  "url": "https://eggmasonvalue.github.io/reading-freertos-strategically-course/lessons/0008-pull-complexity-downward.html"
+}
+</script>
 </head>
 <body>
-<div class="wrap">
+<article class="wrap">
   <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 08 <span class="sep">/</span> ~13 min <span class="sep">/</span> Module B</p>
   <h1>Someone has to eat the complexity</h1>
   <p class="lede">Complexity in a system is conserved — it doesn't vanish, it only moves. The one real choice a designer makes is <em>where it lands</em>: inside the module, paid once by its author, or out in the interface, paid forever by every caller. Ousterhout's Ch. 8 gives the default direction, and it's counter-intuitive: pull it <strong>down</strong>.</p>
@@ -135,7 +157,7 @@ TaskHandle_t xTaskCreateStatic( TaskFunction_t pxTaskCode, ...,
     <a href="0007-different-layer-different-abstraction.html">← Lesson 7</a>
     <a href="0009-isolate-what-changes.html">Lesson 9 — Isolate What Changes →</a>
   </div>
-</div>
+</article>
 
 <script src="../assets/quiz.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 <script>

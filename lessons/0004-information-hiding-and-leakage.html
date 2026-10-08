@@ -4,12 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson 4 — Information Hiding &amp; Leakage</title>
+<meta name="description" content="Lesson 2 asked whether a module is deep. This one asks how it got that way. The answer is almost always the same move: a design decision was sealed inside...">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Lesson 4 — Information Hiding &amp; Leakage">
+<meta property="og:description" content="Lesson 2 asked whether a module is deep. This one asks how it got that way. The answer is almost always the same move: a design decision was sealed inside...">
+<meta property="og:url" content="https://eggmasonvalue.github.io/reading-freertos-strategically-course/lessons/0004-information-hiding-and-leakage.html">
 <link rel="stylesheet" href="../assets/course.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
 <link rel="stylesheet" href="../assets/quiz.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
 <script src="../assets/theme.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Lesson 4 — Information Hiding & Leakage",
+  "description": "Lesson 2 asked whether a module is deep. This one asks how it got that way. The answer is almost always the same move: a design decision was sealed inside...",
+  "author": {
+    "@type": "Person",
+    "name": "eggmasonvalue"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Reading FreeRTOS Strategically"
+  },
+  "url": "https://eggmasonvalue.github.io/reading-freertos-strategically-course/lessons/0004-information-hiding-and-leakage.html"
+}
+</script>
 </head>
 <body>
-<div class="wrap">
+<article class="wrap">
   <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 04 <span class="sep">/</span> Module A <span class="sep">/</span> ~12 min</p>
   <h1>The struct you're not allowed to see</h1>
   <p class="lede">Lesson 2 asked <em>whether</em> a module is deep. This one asks <em>how</em> it got that way. The answer is almost always the same move: a design decision was sealed inside the implementation so it never reached the interface. In C, that move has a name and a mechanism — and the kernel runs it in two lines.</p>
@@ -135,7 +157,7 @@
     <a href="0003-a-documented-decision.html">← Lesson 3</a>
     <a href="0005-general-purpose-is-deeper.html">Lesson 5 — General-Purpose Is Deeper →</a>
   </div>
-</div>
+</article>
 
 <script src="../assets/quiz.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 <script>

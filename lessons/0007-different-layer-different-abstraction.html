@@ -4,12 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lesson 7 — Different Layer, Different Abstraction</title>
+<meta name="description" content="Module A trained your eye on single modules. Module B is about how they stack. The first test of a healthy stack is brutally simple: as you move from one...">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Lesson 7 — Different Layer, Different Abstraction">
+<meta property="og:description" content="Module A trained your eye on single modules. Module B is about how they stack. The first test of a healthy stack is brutally simple: as you move from one...">
+<meta property="og:url" content="https://eggmasonvalue.github.io/reading-freertos-strategically-course/lessons/0007-different-layer-different-abstraction.html">
 <link rel="stylesheet" href="../assets/course.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
 <link rel="stylesheet" href="../assets/quiz.css?v=a05184d913cc9c069455e68a7e902ecd726247e5">
 <script src="../assets/theme.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Lesson 7 — Different Layer, Different Abstraction",
+  "description": "Module A trained your eye on single modules. Module B is about how they stack. The first test of a healthy stack is brutally simple: as you move from one...",
+  "author": {
+    "@type": "Person",
+    "name": "eggmasonvalue"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Reading FreeRTOS Strategically"
+  },
+  "url": "https://eggmasonvalue.github.io/reading-freertos-strategically-course/lessons/0007-different-layer-different-abstraction.html"
+}
+</script>
 </head>
 <body>
-<div class="wrap">
+<article class="wrap">
   <p class="kicker">Strategic Programmer <span class="sep">/</span> Lesson 07 <span class="sep">/</span> ~13 min <span class="sep">/</span> Module B</p>
   <h1>Each layer should speak a different language</h1>
   <p class="lede">Module A trained your eye on single modules. Module B is about how they <em>stack</em>. The first test of a healthy stack is brutally simple: as you move from one layer to the next, does the <em>vocabulary</em> actually change? When it doesn't, you've found a layer that isn't earning its keep.</p>
@@ -115,7 +137,7 @@ pxNewTCB-&gt;pxTopOfStack = pxPortInitialiseStack( pxTopOfStack, pxNewTCB-&gt;px
     <a href="0006-coupling-and-connascence.html">← Lesson 6</a>
     <a href="0008-pull-complexity-downward.html">Lesson 8 — Pull Complexity Downward →</a>
   </div>
-</div>
+</article>
 
 <script src="../assets/quiz.js?v=a05184d913cc9c069455e68a7e902ecd726247e5"></script>
 <script>
