@@ -19,4 +19,14 @@ The original course code is licensed under the [MIT License](LICENSE). The origi
 
 The pinned upstream snapshots and their licenses are retained under [`reference/`](reference/). See [`reference/PROVENANCE.md`](reference/PROVENANCE.md) for the upstream repositories, exact commits, and snapshot rationale. Third-party material remains under its own license.
 
-This repository is the public course package. It is generated from the course's authoring workspace; `.source-commit` records the source revision used for the latest publication.
+## Maintaining the site
+
+This repository is the source of truth for the published site. Edit the static pages in `lessons/`, shared files in `assets/`, and the pinned source material in `reference/` and `reference-source/` directly. Citation links and line-numbered source views are already part of the static pages; do not run a private-workspace generator to rebuild them.
+
+The site is plain static HTML, CSS, and JavaScript. Validate local links, citation line bounds, and public-content hygiene with the standard-library-only checker:
+
+```sh
+python scripts/check-site.py
+```
+
+GitHub Actions runs this check on pushes and pull requests. Hosting remains the existing GitHub Pages deployment from the `main` branch root; the workflow validates the checked-in site and does not build or deploy it.
