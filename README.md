@@ -23,10 +23,13 @@ The pinned upstream snapshots and their licenses are retained under [`reference/
 
 This repository is the source of truth for the published site. Edit the static pages in `lessons/`, shared files in `assets/`, and the pinned source material in `reference/` and `reference-source/` directly. Citation links and line-numbered source views are already part of the static pages; do not run a private-workspace generator to rebuild them.
 
-The site is plain static HTML, CSS, and JavaScript. Validate local links, citation line bounds, and public-content hygiene with the standard-library-only checker:
+When adding, removing, or reordering lessons, keep the four-digit lesson filenames contiguous, update the course map in `index.html`, and update the adjacent Previous/Next links and titles in each lesson footer. The last published lesson should point back to Course contents and say “End of currently published lessons”; it should not imply an unpublished next module. Regression tests cover these navigation rules.
+
+The site is plain static HTML, CSS, and JavaScript. Run the standard-library-only navigation regression tests, then validate local links, citation line bounds, and public-content hygiene:
 
 ```sh
+python -m unittest discover -s tests -v
 python scripts/check-site.py
 ```
 
-GitHub Actions runs this check on pushes and pull requests. Hosting remains the existing GitHub Pages deployment from the `main` branch root; the workflow validates the checked-in site and does not build or deploy it.
+GitHub Actions runs both checks on pushes and pull requests. Hosting remains the existing GitHub Pages deployment from the `main` branch root; the workflow validates the checked-in site and does not build or deploy it.

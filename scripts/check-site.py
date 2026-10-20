@@ -2,8 +2,8 @@
 """Validate the already-built, public static site without rewriting it.
 
 Run from any directory with ``python scripts/check-site.py``. This is a
-validator, not a renderer: citation links and line-numbered source views are
-checked in place and are never regenerated.
+validator, not a renderer: course navigation, citation links, and line-numbered
+source views are checked in place and are never regenerated.
 """
 from __future__ import annotations
 
@@ -61,6 +61,75 @@ class ParsedPage:
     citations: list[Citation] = field(default_factory=list)
     has_untransformed_source_ref: bool = False
     privacy_errors: list[str] = field(default_factory=list)
+
+
+@dataclass
+class NavigationLink:
+    href: str
+    rel: list[str]
+    text: str = ""
+
+
+@dataclass
+class NavigationBlock:
+    tag: str
+    attrs: dict[str, str]
+    links: list[NavigationLink] = field(default_factory=list)
+    text: str = ""
+
+
+class NavigationParser(HTMLParser):
+    """Collect navigation blocks and links for course-flow validation."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.blocks: list[NavigationBlock] = []
+        self.active_blocks: list[NavigationBlock] = []
+        self.class_nav_count = 0
+        self.links: list[NavigationLink] = []
+        self.active_link: tuple[NavigationLink, NavigationBlock | None] | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._start(tag, attrs, push=True)
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        self._start(tag, attrs, push=False)
+
+    def _start(
+        self, tag: str, attrs: list[tuple[str, str | None]], *, push: bool
+    ) -> None:
+        attributes = {name.lower(): value or "" for name, value in attrs}
+        if "nav" in attributes.get("class", "").split():
+            self.class_nav_count += 1
+            block = NavigationBlock(tag.lower(), attributes)
+            self.blocks.append(block)
+            if push:
+                self.active_blocks.append(block)
+        if tag.lower() == "a":
+            link = NavigationLink(
+                attributes.get("href", ""),
+                attributes.get("rel", "").lower().split(),
+            )
+            self.links.append(link)
+            block = self.active_blocks[-1] if self.active_blocks else None
+            if block is not None:
+                block.links.append(link)
+            self.active_link = (link, block)
+
+    def handle_data(self, data: str) -> None:
+        for block in self.active_blocks:
+            block.text += data
+        if self.active_link is not None:
+            self.active_link[0].text += data
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if tag == "a":
+            self.active_link = None
+        for index in range(len(self.active_blocks) - 1, -1, -1):
+            if self.active_blocks[index].tag == tag:
+                del self.active_blocks[index:]
+                break
 
 
 class PageParser(HTMLParser):
@@ -322,6 +391,139 @@ def check_privacy(root: Path, errors: list[str]) -> None:
             )
 
 
+def check_course_navigation(root: Path, errors: list[str]) -> None:
+    """Validate the numbered lesson sequence and all sequential navigation."""
+    lesson_dir = root / "lessons"
+    numbered_pattern = re.compile(r"^(\d{4})-.+\.html$")
+    lesson_paths = sorted(lesson_dir.glob("*.html")) if lesson_dir.is_dir() else []
+    numbered: list[tuple[int, Path]] = []
+    for path in lesson_paths:
+        match = numbered_pattern.fullmatch(path.name)
+        if match is None:
+            errors.append(f"lessons/{path.name}: lesson filename is not numbered")
+        else:
+            numbered.append((int(match.group(1)), path))
+
+    numbers = [number for number, _ in numbered]
+    if not numbers:
+        errors.append("lessons/: no numbered lesson pages found")
+    elif numbers != list(range(1, len(numbers) + 1)):
+        errors.append(f"lessons/: numbered lessons are not contiguous from 0001: {numbers}")
+
+    lesson_files = [path.name for _, path in numbered]
+    index_path = root / "index.html"
+    if not index_path.is_file():
+        errors.append("index.html: missing course index")
+        return
+    try:
+        index_parser = NavigationParser()
+        index_parser.feed(index_path.read_text(encoding="utf-8"))
+        index_parser.close()
+    except (OSError, UnicodeError) as error:
+        errors.append(f"cannot read course index {index_path}: {error}")
+        return
+
+    index_entries = [
+        link for link in index_parser.links
+        if urlsplit(link.href).path.startswith("lessons/")
+    ]
+    expected_index_hrefs = [f"lessons/{filename}" for filename in lesson_files]
+    actual_index_hrefs = [link.href for link in index_entries]
+    if actual_index_hrefs != expected_index_hrefs:
+        errors.append(
+            "index.html: course map must list every lesson in numbered order "
+            f"(expected {expected_index_hrefs}, found {actual_index_hrefs})"
+        )
+    index_titles = {
+        Path(urlsplit(link.href).path).name: " ".join(link.text.split())
+        for link in index_entries
+    }
+
+    contents_href = "../index.html#course-map"
+    for position, filename in enumerate(lesson_files):
+        relative = f"lessons/{filename}"
+        path = lesson_dir / filename
+        try:
+            parser = NavigationParser()
+            parser.feed(path.read_text(encoding="utf-8"))
+            parser.close()
+        except (OSError, UnicodeError) as error:
+            errors.append(f"cannot read lesson navigation {relative}: {error}")
+            continue
+
+        if parser.class_nav_count != 1 or len(parser.blocks) != 1:
+            errors.append(
+                f"{relative}: expected exactly one lesson navigation element "
+                f"with class=nav (found {parser.class_nav_count})"
+            )
+            continue
+        nav = parser.blocks[0]
+        if nav.tag != "nav" or nav.attrs.get("aria-label") != "Lesson navigation":
+            errors.append(
+                f"{relative}: navigation must be <nav class=\"nav\" "
+                "aria-label=\"Lesson navigation\">"
+            )
+
+        previous = parser.blocks[0].links
+        prev_links = [link for link in previous if "prev" in link.rel]
+        next_links = [link for link in previous if "next" in link.rel]
+        is_first = position == 0
+        is_last = position == len(lesson_files) - 1
+        expected_prev = lesson_files[position - 1] if not is_first else None
+        expected_next = lesson_files[position + 1] if not is_last else None
+
+        if expected_prev is None:
+            if prev_links:
+                errors.append(f"{relative}: first lesson must not have rel=prev")
+        elif len(prev_links) != 1 or prev_links[0].href != expected_prev:
+            errors.append(
+                f"{relative}: rel=prev must link to {expected_prev}"
+            )
+
+        if expected_next is None:
+            if next_links:
+                errors.append(f"{relative}: last lesson must not have rel=next")
+        elif len(next_links) != 1 or next_links[0].href != expected_next:
+            errors.append(
+                f"{relative}: rel=next must link to {expected_next}"
+            )
+        elif index_titles.get(expected_next):
+            expected_label = f"{index_titles[expected_next]} →"
+            if " ".join(next_links[0].text.split()) != expected_label:
+                errors.append(
+                    f"{relative}: next link text must be the course title "
+                    f"{expected_label!r}"
+                )
+
+        contents_links = [link for link in previous if link.href == contents_href]
+        if len(contents_links) != 1 or contents_links[0].text.strip() != "Course contents":
+            errors.append(
+                f"{relative}: lesson navigation must contain one Course contents link "
+                f"to {contents_href}"
+            )
+
+        expected_hrefs = (
+            ([expected_prev] if expected_prev else [])
+            + [contents_href]
+            + ([expected_next] if expected_next else [])
+        )
+        actual_hrefs = [link.href for link in previous]
+        if actual_hrefs != expected_hrefs:
+            errors.append(
+                f"{relative}: navigation links must be previous, contents, next "
+                f"as applicable (expected {expected_hrefs}, found {actual_hrefs})"
+            )
+        if is_last:
+            ending = " ".join(nav.text.split())
+            if "End of currently published lessons" not in ending:
+                errors.append(
+                    f"{relative}: last lesson must say "
+                    "End of currently published lessons"
+                )
+            if "Module E next" in ending:
+                errors.append(f"{relative}: misleading Module E next navigation")
+
+
 def validate(root: Path) -> list[str]:
     errors: list[str] = []
     root = root.resolve()
@@ -392,6 +594,7 @@ def validate(root: Path) -> list[str]:
                         f"{target.relative_to(root).as_posix()}"
                     )
 
+    check_course_navigation(root, errors)
     return errors
 
 
